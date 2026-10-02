@@ -109,10 +109,10 @@ or move production to fp8. The current stable path keeps:
 > dumping tool-call fragments under concurrency, then recovering — was
 > root-caused to a DSpark spec-decode cold-start draft/target mismatch (a greedy
 > draft) plus a `repetition_penalty` crash risk, not sampling. The current fix is
-> the five changes summarized in the archived README
-> ["Garble fix (2026-07-03)"](README.md#garble-fix-2026-07-03)
-> section. This note is kept for the deployment-drift and per-node checks that
-> still apply.
+> the changes summarized in
+> [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) and
+> [`docs/PATCHES.md`](docs/PATCHES.md). This note is kept for the
+> deployment-drift and per-node checks that still apply.
 >
 > **2026-07-31 correction.** The "greedy draft" half of that root cause does not
 > hold: `draft_sample_method` is a **no-op** for DSpark in this runtime — the

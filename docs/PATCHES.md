@@ -275,3 +275,58 @@ sliding-window/compressor groups churn the shared LRU during any long prefill, e
 every other cached prefix. See `docs/PATCH6-KV-CACHE-PREFIX-EVICTION.md` for the analysis,
 the fix and the validation table; file: `recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py`,
 diff: `patches/0006-kv-cache-prompt-protection-cap-and-swa-recycle.patch`.
+
+---
+
+## Patch 5 (optional — not mounted by the current launchers) — stop strings must not fire inside the reasoning segment
+
+### Symptom
+
+A harness that sends `stop` sequences (lm-evaluation-harness sends `stop[:4]` on **every**
+request) silently loses answers. Generation starts *inside* `<|im_start|>`, chain-of-thought
+naturally restates phrases like `Question:`, the stop fires mid-reasoning, `<|im_end|>`
+never arrives, and the reasoning parser returns `content: null`. The request looks like a
+model failure; it is a serving-layer one. Hosted deployments of the same model are immune
+because they scope stops to content.
+
+### Root cause
+
+vLLM's v1 detokenizer matches client stop strings against the **whole output stream**,
+including the reasoning segment.
+
+### Fix
+
+`patches/0005-suppress-stops-in-reasoning.patch` — bind-mount, no rebuild:
+
+```bash
+-v /path/to/patched/detokenizer.py:/opt/env/lib/python3.12/site-packages/vllm/v1/engine/detokenizer.py:ro
+```
+
+The guard is per-request and needs no configuration: if the request's last prompt token is
+`<|im_start|>`, stop strings stay dormant until `<|im_end|>` appears. EOS and `max_tokens` are
+unaffected, and non-thinking requests are untouched. Opt out with
+`VLLM_SUPPRESS_STOPS_IN_REASONING=0`.
+
+**Both nodes.** The launcher syncs the compose and env files to the worker but **not**
+bind-mounted patch files. The file must exist at the same path on the worker too, or it
+silently runs unpatched and you get confusing half-fixed results.
+
+### Known side effect: reasoning runaways become more visible, not less
+
+Worth stating so it is not read as a regression. Issue #18 (B) is a reasoning runaway in
+which `<|im_end|>` never arrives. Because this patch keeps stops dormant until the end marker
+appears, a request in that state now keeps stops dormant for its whole life and runs to
+`max_tokens` — where previously a client stop string could cut it short by accident.
+
+That is correct by design: a stop string was never meant to bound reasoning, and a run
+truncated by one was returning `content: null` anyway. The practical effect is that (B)
+shows up as a full-budget request rather than a short one, so a fleet that applies this patch
+may see *reported* token usage on those requests rise. The failure rate does not change; only
+how long each failure takes to admit it. If you are measuring (B), stop strings are no longer a
+confound in either direction.
+
+### Status in this repo
+
+**Not part of the current launcher mount set** (Patch 3 / Patch 4 / Patch 6 plus the four
+vision-port files). Apply it only if you serve thinking mode to harnesses that send stop
+sequences.
