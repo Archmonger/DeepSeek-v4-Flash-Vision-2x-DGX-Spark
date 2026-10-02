@@ -202,7 +202,18 @@ unchanged.
 
 ---
 
-## Patch 6 — preserve the local scheduler queue across long model loads
+> **Naming note (fork merge).** Two independent upstream changes both carry the
+> "Patch 6" label: the local scheduler-queue lifetime fix from
+> [upstream PR #30](https://github.com/tonyd2wild/DeepSeek-v4-Flash-Vision-Exp-DSpark-1M-NVFP4-KV-2x-DGX-Spark/pull/30)
+> and the KV prefix-cache fix from
+> [upstream PR #54](https://github.com/tonyd2wild/DeepSeek-v4-Flash-Vision-Exp-DSpark-1M-NVFP4-KV-2x-DGX-Spark/pull/54).
+> This fork adopts both, so the headings below call out which PR each section came
+> from. Every file name is kept exactly as upstream shipped it
+> (`patch6-single_type_kv_cache_manager.py`,
+> `patches/0006-kv-cache-prompt-protection-cap-and-swa-recycle.patch`, the
+> `Patch 6` anchors in `sparkrun/`), so those paths still resolve.
+
+## Patch 6 (from upstream #30) — preserve the local scheduler queue across long model loads
 
 ### Symptom
 
@@ -252,3 +263,15 @@ two-node deployment: correct 1M model metadata, a real completion, six concurren
 completions, and no CUDA, NCCL, EngineDead, or request errors. That live system was
 not reused for PR testing; maintainers should retain their requested two-node
 reproduction gate before merge.
+---
+
+## Patch 6 (from upstream #54) — prefix cache lost on long conversations (protection cap + SWA page recycling)
+
+Long-context agent sessions saw the first call of most turns re-prefill the whole prompt
+(235 s for ~400K tokens) although identical resends hit 100%. Two causes in
+`vllm/v1/core/single_type_kv_cache_manager.py`: the DSv4 prompt-block protection has an
+effectively infinite cap at 1M context (pins ~30–60 pages per request, forever), and the
+sliding-window/compressor groups churn the shared LRU during any long prefill, evicting
+every other cached prefix. See `docs/PATCH6-KV-CACHE-PREFIX-EVICTION.md` for the analysis,
+the fix and the validation table; file: `recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py`,
+diff: `patches/0006-kv-cache-prompt-protection-cap-and-swa-recycle.patch`.
