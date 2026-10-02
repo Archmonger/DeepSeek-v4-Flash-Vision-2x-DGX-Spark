@@ -1,11 +1,12 @@
 # DeepSeek V4 Flash Vision-Exp (DSpark) — native image input, 1M ctx, NVFP4 KV — 2x DGX Spark
 # sparkrun recipe for the experimental VISION build DeepSeek-V4-Flash-Vision-Exp.
-# It is the text 0731 recipe + the vision port, fully self-contained: pre_exec fetches
+# It is the base NVFP4 DSpark recipe + the vision port, fully self-contained: pre_exec fetches
 # the vision port from this repo's `vision-exp-default` branch (it is NOT in main — see
 # VISION-EXP-DEFAULT-CONFIG.md) and injects it into the runtime, so nothing must be
 # staged by hand on the nodes.
 # WHY A PORT IS NEEDED:
-#   DeepSeek-V4-Flash-Vision-Exp reports the SAME architectures string as text 0731
+#   DeepSeek-V4-Flash-Vision-Exp reports the SAME architectures string as the text-only
+#   DeepSeek V4 lane
 #   (DeepseekV4ForCausalLM) but carries 316 extra tensors — a 32-block ViT, an aligner,
 #   and four learned embeddings (image_start/end/newline/pad) — with no home in the
 #   text-only class. vLLM dies on shard 00001 with:
@@ -15,9 +16,9 @@
 #   per-layer MoE gate bias + bias_vl, and registers a multimodal architecture alias
 #   (DeepseekV4VForConditionalGeneration) selected via --hf-overrides — because vLLM
 #   answers is_multimodal_model from a STATIC arch-name table, not from the class.
-#   All patches are guarded on vision_n_layers>0, so text-only 0731 is unchanged.
+#   All patches are guarded on vision_n_layers>0, so text-only serving is unchanged.
 #   Full write-up (12 blockers, measured numbers, known deviations): vision-exp/README.md.
-# CHECKPOINT DIFFERENCES vs text 0731 (from the port README):
+# CHECKPOINT DIFFERENCES vs the text-only build (from the port README):
 #   * +10 vision_* config keys (vision_n_layers 32, vision_dim 1024, patch 14, 2D RoPE,
 #     downsample 3)
 #   * num_nextn_predict_layers 1 -> 3  (the DSpark drafter is now 3 layers)
@@ -28,7 +29,7 @@
 # Patch 4 spec-dspark.py mount, which silently loads the draft's shared expert
 # uninitialised and collapses acceptance (issue #48). With Patch 4 mounted, k=5 wins.
 # k=6 is rejected at boot ("must be divisible by n_predict=5").
-# IMPORTANT invariants (identical to the text recipe):
+# IMPORTANT invariants (identical to the base NVFP4 DSpark runtime):
 #   * VLLM_USE_B12X_MOE=1 is mandatory (=0 silently falls back to DEEPGEMM_MXFP4).
 #   * No --override-generation-config / repetition_penalty (DSpark spec-decode crash).
 #   * No VLLM_USE_V2_MODEL_RUNNER=1 (hard reject with DSpark).
@@ -40,14 +41,14 @@
 #   * modelinfos/ inspection cache MUST be cleared after patching the model interface.
 # KNOWN PORT DEVIATIONS (image QUALITY only, not crashes): image spans use causal sparse
 # attention (no bidirectional window), and bias_vl is loaded but not applied. Text-only
-# requests are byte-identical to 0731.
+# requests are unchanged from the text-only DeepSeek V4 lane.
 # Model: official deepseek-ai/DeepSeek-V4-Flash-Vision-Exp. Swap in any abliterated
 # Vision-Exp derivative (same layout) by changing the model field; the port is the same.
 
 recipe_version: "2"
 model: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
 runtime: vllm
-# Same digest-pinned public base as the text recipe. The recipe reproduces tonyd2wild's
+# Digest-pinned public base image. The recipe reproduces tonyd2wild's
 # `vllm-dspark-runtime:dspark-nvfp4-stage-c` runtime in-container (overlay -> nvfp4 stages)
 # and then injects the vision port on top. No manual image build, no private image.
 container: ghcr.io/bjk110/vllm-spark@sha256:d8492e7677cf1b9aaa3344e0e6865efc468454013eee5ebabac85be90af027be
@@ -72,13 +73,12 @@ defaults:
   served_model_name: deepseek-v4-flash-vision-exp
   kv_cache_dtype: nvfp4_ds_mla
   block_size: 256
-  # 1M = the model's calibrated YaRN ceiling (65536 x factor 16). The vision-exp-default
-  # branch also validated 1500000 at gmu 0.85 (KV pool ~2.9M tokens) if you want to push
-  # it — but 1M is calibrated and matches the text recipe.
+  # 1M = the model's calibrated YaRN ceiling (65536 x factor 16). Anything past it is
+  # extrapolation, not calibration; 1M is what the launchers run.
   max_model_len: 1048576
   # 12 slots / 0.85 gmu = the vision port's verified-live lane (VISION-EXP-DEFAULT-CONFIG.md
-  # and the vision-exp-default deployment). The text recipe's 6/0.78 profile is the
-  # conservative 0731 lane; the vision port runs 12/0.85 in production.
+  # and the vision-exp-default deployment). The 6/0.78 profile is the conservative text-lane
+  # setting; the vision port runs 12/0.85 in production.
   max_num_seqs: 12
   max_num_batched_tokens: 8192
   gpu_memory_utilization: 0.85
@@ -120,8 +120,8 @@ env:
   # nodes over NFS (to avoid downloading 167 GB twice), BOTH TP ranks JIT into the same
   # directories and you get, in order: a torch.compile makedirs race, DeepGEMM
   # "runtime != nullptr" from half-written cubins, and an ABI-mismatched FlashInfer
-  # sampling.so (silent because FLASHINFER_DISABLE_VERSION_CHECK=1). The text recipe
-  # points VLLM_CACHE_ROOT into the HF cache and documents overriding all SEVEN onto a
+  # sampling.so (silent because FLASHINFER_DISABLE_VERSION_CHECK=1). The upstream NVFP4
+  # build points VLLM_CACHE_ROOT into the HF cache and documents overriding all SEVEN onto a
   # node-local path in that case. Here we point them at sparkrun's node-local runtime
   # cache (/cache/runtime, bind of ~/.cache/sparkrun/runtime-cache on each host) so the
   # vision port is safe regardless of how the HF cache is mounted. If /cache/runtime is
@@ -170,7 +170,7 @@ pre_exec:
       chmod +x /usr/local/bin/kill
       echo "[dspark-overlay] installed /usr/local/bin/kill shim (image has no kill binary)"
     fi
-  # --- base DSpark overlay + nvfp4 stages (same as the text recipe) ---
+  # --- base DSpark overlay + nvfp4 stages (same as the base NVFP4 runtime) ---
   # Fetched from THIS repo @ the pinned commit, so the overlay and the vision port below
   # come from a mutually-consistent tree.
   - |
@@ -202,7 +202,7 @@ pre_exec:
         || { echo "[dspark-overlay] FATAL: Patch 3 missing — cold prefills would garble"; exit 1; }
       echo "[dspark-overlay] verifying Patch 4 (draft shared-expert loader fix) is present"
       grep -q "shared_experts.gate_up_proj" "$VLLM_ROOT/v1/spec_decode/dspark.py" \
-        || { echo "[dspark-overlay] FATAL: Patch 4 missing — 0731 would run at half speed"; exit 1; }
+        || { echo "[dspark-overlay] FATAL: Patch 4 missing — vision-exp would run at half speed"; exit 1; }
       find "$VLLM_ROOT" -name __pycache__ -type d -prune -exec rm -rf {} + || true
       /opt/env/bin/python -m py_compile "$VLLM_ROOT/envs.py" "$VLLM_ROOT/v1/core/sched/scheduler.py" "$VLLM_ROOT/v1/spec_decode/dspark.py" "$VLLM_ROOT/v1/spec_decode/dspark_proposer.py"
       touch "$VLLM_ROOT/.sparkrun-dspark-overlay-$COMMIT"

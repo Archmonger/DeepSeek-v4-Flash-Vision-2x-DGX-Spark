@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Warm-up + reference speed test for the DeepSeek V4 Flash DSpark recipes.
+# Warm-up + reference speed test for the DeepSeek-V4-Flash-Vision-Exp DSpark recipes.
 #
 # Sends 3 x ~1500-token warm-up generations (the engine runs ~30% slow after
 # boot or ~30 min idle), then the "Protocol Starfall" prompt from the original
@@ -8,13 +8,13 @@
 #
 # Usage:
 #   ./speedtest-starfall.sh [base_url] [model]
-#   ./speedtest-starfall.sh                                     # localhost:8888, 0731
+#   ./speedtest-starfall.sh                                     # localhost:8888, default served id
 #   ./speedtest-starfall.sh http://10.0.0.25:8888               # remote head
-#   ./speedtest-starfall.sh http://10.0.0.25:8888 deepseek-v4-flash-dspark   # preview recipe
+#   ./speedtest-starfall.sh http://10.0.0.25:8888 deepseek-v4-flash-dspark   # served id
 set -eu
 
 BASE_URL="${1:-http://127.0.0.1:8888}"
-MODEL="${2:-deepseek-v4-flash-0731}"
+MODEL="${2:-deepseek-v4-flash-dspark}"
 
 python3 - "$BASE_URL" "$MODEL" <<'PY'
 import json, sys, time, urllib.request

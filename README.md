@@ -22,7 +22,8 @@ does not copy them for you.
 # 1. Generate the four vision-port files (run on every node)
 ./vision-exp/build-ds4v-files.sh          # -> /var/tmp/ds4v_{model,vision,mm,registry}.py
 
-# 2. Stage the three patched runtime files (run on every node)
+# 2. Stage the patched runtime files (run on every node)
+#    What each file is and why it is required: docs/PATCHES.md
 cp recipe/overlay/vllm/v1/core/sched/scheduler.py                  /var/tmp/patch3-scheduler.py
 cp recipe/overlay/vllm/v1/spec_decode/dspark.py                    /var/tmp/spec-dspark.py
 cp recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py     /var/tmp/patch6-single_type_kv_cache_manager.py
@@ -43,19 +44,23 @@ curl -fsS http://127.0.0.1:8888/v1/models
 The API serves at `http://<head>:8888/v1` under the model id
 **`deepseek-v4-flash-dspark`**.
 
-### Check Patch 4 before you trust any number
+### Verify before you trust any number
 
-A missing `spec-dspark.py` mount loads the DSpark draft's always-on shared expert
-**uninitialised**. Result: roughly **half the decode speed with perfect output quality
-and no error** — the dropped tensors are reported at `logger.debug`, invisible at the
-default log level, and the broken load reports success. That combination sends you
-looking in exactly the wrong place.
+The launcher fails closed on missing staged files, but one class of failure is silent: a
+missing patch mount can cost roughly **half your decode speed while producing perfect
+output and no error**. Run the fail-closed preflight on **both** nodes before quoting any
+measurement, and see [`docs/PATCHES.md`](docs/PATCHES.md) for the full patch inventory,
+what each patch does, how each is delivered, and how to verify it landed.
 
 ```bash
 ./scripts/check-patch4.sh <head-container> <worker-container>   # run against BOTH nodes
 ```
 
-Full mechanism: [`DSPARK-SHARED-EXPERT-FIX.md`](DSPARK-SHARED-EXPERT-FIX.md).
+## Patches
+
+Everything about the patches — inventory, symptoms, root causes, delivery (baked into the
+image vs read-only bind mount), staging, verification, and the environment knobs — lives in
+one place: **[`docs/PATCHES.md`](docs/PATCHES.md)**.
 
 ## What the recipe pins
 
@@ -74,33 +79,13 @@ Full mechanism: [`DSPARK-SHARED-EXPERT-FIX.md`](DSPARK-SHARED-EXPERT-FIX.md).
 KV pool size is a **per-boot** figure that swings with unified-memory usage; read it off
 the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS.md)).
 
-## Patches
-
-All four are required. The launcher hard-fails if Patch 3, 4, or 6 is missing from
-`/var/tmp`; a missing vision-port file fails at container start instead.
-
-| Patch | What it fixes | Source in this repo | Staged at | Reference |
-|---|---|---|---|---|
-| **3** | Cold-start agent garble (spec-placeholder resize guard) | `recipe/overlay/vllm/v1/core/sched/scheduler.py` | `/var/tmp/patch3-scheduler.py` | [`docs/PATCHES.md`](docs/PATCHES.md) |
-| **4** | DSpark draft shared-expert loads uninitialised → silent half speed | `recipe/overlay/vllm/v1/spec_decode/dspark.py` | `/var/tmp/spec-dspark.py` | [`DSPARK-SHARED-EXPERT-FIX.md`](DSPARK-SHARED-EXPERT-FIX.md) |
-| **6** | Prefix cache lost on long conversations | `recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py` | `/var/tmp/patch6-single_type_kv_cache_manager.py` | [`docs/PATCH6-KV-CACHE-PREFIX-EVICTION.md`](docs/PATCH6-KV-CACHE-PREFIX-EVICTION.md) |
-| **Vision port** | Native image input (ViT + aligner + multimodal registry alias) | `vision-exp/port/*.py`, generated per image by `build-ds4v-files.sh` | `/var/tmp/ds4v_{model,vision,mm,registry}.py` | [`vision-exp/README.md`](vision-exp/README.md) |
-
-Patch 6 is tunable: `PROTECTED_FRACTION` (default `0.30`) and `SWA_RECYCLE`
-(default `1`) — see [`CURRENT.md`](CURRENT.md).
-
-The overlay image (`recipe/Dockerfile.dspark-runtime-overlay`) bakes the same overlay
-sources in at build time; the vision launchers use read-only bind mounts because the
-deployed image predates the baked patches. Both routes deliver the same code — and a
-proposer mounted from a mismatched vLLM build will crash the rig, so match the image.
-
 ## Where to read what
 
 | I want to… | Go to |
 |---|---|
 | know exactly what runs today, pinned | [`CURRENT.md`](CURRENT.md) |
 | understand the TP2 command flag by flag | [`VISION-EXP-DEFAULT-CONFIG.md`](VISION-EXP-DEFAULT-CONFIG.md) |
-| understand the patches (1 / 2 / 2b / 3 / 5 / 6) | [`docs/PATCHES.md`](docs/PATCHES.md) |
+| understand the patches | [`docs/PATCHES.md`](docs/PATCHES.md) |
 | work with thinking / `reasoning_effort` | [`docs/reasoning-mode.md`](docs/reasoning-mode.md) |
 | read cache hits per request | [`docs/cache-reporting.md`](docs/cache-reporting.md) |
 | debug a broken or slow deployment | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
@@ -108,7 +93,6 @@ proposer mounted from a mismatched vLLM build will crash the rig, so match the i
 | understand the vision port internals | [`vision-exp/README.md`](vision-exp/README.md) |
 | run this on hardware that isn't the author's | [`docs/PORTABILITY.md`](docs/PORTABILITY.md) |
 | one-command deployment via sparkrun | [`sparkrun/README.md`](sparkrun/README.md) |
-| compare our serving fidelity to the hosted reference | [`parity/`](parity/) |
 | see who did what | [`CREDITS.md`](CREDITS.md) |
 
 ## Repository layout
@@ -120,10 +104,9 @@ proposer mounted from a mismatched vLLM build will crash the rig, so match the i
 | `recipe/` | runtime overlay sources, the overlay Dockerfile, and the NVFP4 stage A/B/C Dockerfiles |
 | `patches/` | patch files and patchers applied to the runtime |
 | `scripts/` | preflight checks (`check-patch3.sh`, `check-patch4.sh`), sanity benches, guards |
-| `benchmarks/` | measurement harnesses and captured checkpoint evidence |
+| `benchmarks/` | measurement harnesses (peak, soak, concurrency, garble taps) |
 | `docs/` | reference docs — patches, reasoning mode, troubleshooting, benchmarking, portability, cache reporting |
 | `sparkrun/` | self-contained sparkrun recipes |
-| `parity/` | reproducible serving-fidelity bench + frozen hosted reference card |
 | `tools/` | repo maintenance; `check-current.sh` keeps `CURRENT.md`'s launcher hashes honest |
 
 ## Contributing

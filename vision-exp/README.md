@@ -1,7 +1,5 @@
 # DeepSeek-V4-Flash-Vision-Exp on 2x DGX Spark — native vision, TP2, DSpark
 
-**Released 2026-08-31. Deployed here the same day, with working native image input.**
-
 This directory adds native multimodal support for
 [`deepseek-ai/DeepSeek-V4-Flash-Vision-Exp`](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Vision-Exp)
 to the DSpark vLLM runtime. Not a sidecar, not a VLM proxy — the model's own ViT and
@@ -14,6 +12,9 @@ $ curl :8888/v1/chat/completions -d @image_request.json
    *   **Red** is on the **left** side.
    *   **Blue** is on the **right** side."
 ```
+
+The runnable recipe and current numbers are in [`CURRENT.md`](../CURRENT.md); the long-form flag
+explanation is in [`VISION-EXP-DEFAULT-CONFIG.md`](../VISION-EXP-DEFAULT-CONFIG.md).
 
 ## Why this needed a port at all
 
@@ -29,21 +30,22 @@ DeepSeek shipped only a reference implementation — its own `inference/README.m
 "a readable reference implementation rather than a production serving engine." There was no
 vLLM path to configure.
 
-## What's new in this checkpoint vs 0731
+## What the Vision-Exp config carries
 
-Diffing the two configs, the language model is **identical** apart from three things:
+Four groups of fields in this checkpoint's `config.json` have no counterpart in the text-only
+vLLM class:
 
-| | 0731 | Vision-Exp |
-|---|---|---|
-| vision keys | — | 10 (`vision_n_layers` 32, `vision_dim` 1024, patch 14, 2D RoPE, downsample 3) |
-| `num_nextn_predict_layers` | 1 | **3** (DSpark drafter is now 3 layers) |
-| `rms_norm_eps` | 1e-6 | 1e-20 |
-| `ffn.gate.*` | `weight`, `tid2eid` | `weight`, `tid2eid`, **`bias`**, **`bias_vl`** |
+| field | this checkpoint |
+|---|---|
+| vision keys | 10 (`vision_n_layers` 32, `vision_dim` 1024, patch size 14, 2D RoPE, downsample 3) |
+| `num_nextn_predict_layers` | **3** — the DSpark drafter is 3 layers |
+| `rms_norm_eps` | 1e-20 |
+| `ffn.gate.*` | `weight`, `tid2eid`, **`bias`**, **`bias_vl`** |
 
-That last row is the interesting one: a **modality-specific MoE routing bias**. `bias`
+The last row is the interesting one: a **modality-specific MoE routing bias**. `bias`
 applies to text tokens, `bias_vl` to image tokens — experts are chosen differently by
-modality. It appears on **all 43 layers**, including the 3 hash-routing layers that 0731
-left without any bias at all. No paper or model card documents it.
+modality. It appears on **all 43 layers**, including the 3 hash-routing layers. No paper or
+model card documents it.
 
 ## Staging the four bind-mounted files
 
@@ -76,6 +78,11 @@ The script verifies its own output before installing — both files must parse, 
 while `ds4v_registry.py` must carry the multimodal alias. A patcher that silently no-ops
 fails here instead of surfacing later as `is not a multimodal model`.
 
+Patch 4 (`spec-dspark.py`) is a **separate, required** mount and is not part of the four
+vision files. Without it the draft's always-on shared expert loads uninitialised and decode
+runs at roughly half speed, silently — see
+[`DSPARK-SHARED-EXPERT-FIX.md`](../DSPARK-SHARED-EXPERT-FIX.md).
+
 ## The port
 
 | file | what it does |
@@ -84,11 +91,12 @@ fails here instead of surfacing later as `is not a multimodal model`.
 | `port/ds4v_mm.py` | vLLM multimodal plumbing: processing info, dummy inputs, and a custom processor. The checkpoint has no HF processor, so preprocessing (resize solver, patchify, N-layout block build) is ported from `inference/image_processor.py`. |
 | `port/patch_vision.py` | Idempotent patcher for vLLM's vendored `deepseek_v4/nvidia/model.py` — 11 anchored edits. |
 | `port/patch_registry.py` | Registers a multimodal architecture alias (see below). |
-| [`../launchers/ds4-vision-tp2.sh`](../launchers/ds4-vision-tp2.sh) | TP2 launcher (canonical path is now `launchers/`; `vision-exp/ds4-vision-tp2.sh` is a symlink kept for older PR/issue links). Byte-for-byte the DEFAULT-CONFIG command plus the vision mounts and `--hf-overrides`. |
+| [`../launchers/ds4-vision-tp2.sh`](../launchers/ds4-vision-tp2.sh) | TP2 launcher (canonical path is `launchers/`; `vision-exp/ds4-vision-tp2.sh` is a symlink kept for older PR/issue links). The validated TP2 command from [`VISION-EXP-DEFAULT-CONFIG.md`](../VISION-EXP-DEFAULT-CONFIG.md) plus the vision mounts and `--hf-overrides`. |
 | [`../launchers/ds4-vision-tp4.sh`](../launchers/ds4-vision-tp4.sh) | TP4 launcher, all four Sparks. Same file extended to 4 nodes, at `max-num-seqs 64` / `max-cudagraph-capture-size 64`. |
 
-Every patch is guarded on `vision_n_layers > 0`, so **text-only 0731 keeps its exact
-previous behaviour** through the same files.
+Every patch is guarded on `vision_n_layers > 0`, so with no vision layers in the config every
+guarded branch resolves to the stock vLLM path and a text-only run through these files is left
+untouched.
 
 ## Twelve things that had to be fixed
 
@@ -99,9 +107,10 @@ Each was a real error, in the order they surfaced:
 2. **`KeyError: aligner.gate_up_proj.bias`** — vLLM's fused-MLP `stacked_params_mapping`
    rewrites any `.w1`/`.w3` into `gate_up_proj`. The ViT MLP and the aligner legitimately use
    `w1`/`w2`. Guard so they fall through to the generic loader.
-3. **`KeyError: layers.0.ffn.gate.e_score_correction_bias`** — the new per-layer gate bias,
-   including on hash-MoE layers vLLM explicitly skips ("hash MoE doesn't use
-   e_score_correction_bias" — true for 0731, no longer true here). Plus `bias_vl`.
+3. **`KeyError: layers.0.ffn.gate.e_score_correction_bias`** — the per-layer gate bias,
+   including on the hash-MoE layers vLLM explicitly skips ("hash MoE doesn't use
+   e_score_correction_bias" — not true of this checkpoint, which carries one there too). Plus
+   `bias_vl`.
 4. **`'DeepseekV4Config' object has no attribute 'image_token_index'`** — the DSpark proposer
    expects the standard VLM field once the model reports multimodal. Published from the
    tokenizer's `<｜deepseek_image｜>` id (129264).
@@ -112,7 +121,8 @@ Each was a real error, in the order they surfaced:
 6. **`is not a multimodal model`** — vLLM answers `is_multimodal_model` from a **static
    architecture-name table**, never inspecting the class. `SupportsMultiModal` in the MRO is
    not enough. Added a `DeepseekV4VForConditionalGeneration` alias in `_MULTIMODAL_MODELS`
-   pointing at the same class, selected via `--hf-overrides`. 0731 keeps the text entry.
+   pointing at the same class, selected via `--hf-overrides`; a config with no `vision_n_layers`
+   keeps the plain text entry.
 7. **Same error, still** — vLLM caches model inspection on disk in
    `$VLLM_CACHE_ROOT/modelinfos/`, keyed by **module + class**. Both names resolve to the same
    class, so the alias reused the stale pre-patch "text-only" entry. Clear `modelinfos/`
@@ -137,60 +147,55 @@ Each was a real error, in the order they surfaced:
 
 ## Measured (2x DGX Spark GB10, TP2, temperature 0)
 
-Measured on the profile as it stood at the time — `MAX_MODEL_LEN=1500000`,
-`MAX_NUM_SEQS=12`, `GPU_MEMORY_UTILIZATION=0.85`, `MTP_NUM_TOKENS=3`,
-`draft_sample_method=probabilistic` — with the vision port on top. **The validated profile is now
-`MAX_MODEL_LEN=1048576` and `MTP_NUM_TOKENS=5`** (see [`CURRENT.md`](../CURRENT.md)); the KV/context
-figures in this table were taken at 1.5M and are not the current numbers.
+Vision-side measurements with the port in place:
 
 | | |
 |---|---|
-| **KV cache pool** | **2,904,519 tokens** (18.18 GiB) |
-| **Context** | **1,500,000** per request · max concurrency **1.94x** |
-| Vision, 112x112 image | correct on colour *and* side, both orientations |
-| Vision, 336x336 + 26-token answer | 1.03 s end to end |
-| Image block size | 112x112 → 117 tokens · 168x168 → 143 · 336x336 → 129 |
+| **Vision, 112x112 image** | correct on colour *and* side, both orientations |
+| **Vision, 336x336 + 26-token answer** | 1.03 s end to end |
+| **Image block size** | 112x112 → 117 tokens · 168x168 → 143 · 336x336 → 129 |
 
-KV pool is a **per-boot** figure, not a fixed property — this repo's own README records an
-11% swing between two boots of an identical config, because available KV memory on GB10
-varies with what else has touched unified memory.
+Image-block token counts match the reference math. For the validated profile's context, KV pool and
+decode numbers see [`CURRENT.md`](../CURRENT.md) and
+[`VISION-EXP-DEFAULT-CONFIG.md`](../VISION-EXP-DEFAULT-CONFIG.md). KV pool size is a **per-boot**
+figure rather than a property of the config: two boots of an identical config can differ by ~11%,
+because available KV memory on GB10 varies with what else has touched unified memory
+([`docs/BENCHMARKS.md`](../docs/BENCHMARKS.md)).
 
-### Speculative depth: k=5 (the k=3 finding below was measured without Patch 4)
+### Speculative depth: `k = 5`
 
-> **Correction (2026-09-02, after [issue #48](../../../issues/48) and [PR #44](../../../pull/44)):** the A/B below was run with a launcher that did **not** bind-mount the Patch 4 `spec-dspark.py` (DSpark shared-expert loader fix). Without it the draft's always-on shared expert loads uninitialised, acceptance collapses, and the 0.542 accept ratio at k=5 is that loader's signature, not a property of the vision drafter. The launcher in this branch now mounts Patch 4 and defaults to **k=5**, matching the main recipe. Measured **with** Patch 4 on a second 2× DGX Spark (BPAMLUX, #48, warm, temp 0, 500K ctx): k=5 count-to-300 **85.5 tok/s** (accept 0.974, 5.88 tok/step) vs k=3 64.4; code 49.9 vs 49.5 (neutral); prose 29.5 vs 32.1 (k=3 +9%). The numbers below are kept for the record as the unpatched measurement; our own re-measurement on this rig is pending.
+**`MTP_NUM_TOKENS=5` is the validated setting** — what the main recipe uses and what
+[`launchers/ds4-vision-tp2.sh`](../launchers/ds4-vision-tp2.sh) and
+[`launchers/ds4-vision-tp4.sh`](../launchers/ds4-vision-tp4.sh) pass. Measured **with Patch 4**
+mounted on a second 2× DGX Spark ([issue #48](https://github.com/tonyd2wild/DeepSeek-v4-Flash-Vision-Exp-DSpark-1M-NVFP4-KV-2x-DGX-Spark/issues/48);
+warm, temp 0, 500K context):
 
+| workload | k=5 | k=3 |
+|---|---:|---:|
+| count to 300 | **85.5 tok/s** (accept 0.974 · 5.88 tok/step) | 64.4 tok/s |
+| code | 49.9 | 49.5 |
+| prose | 29.5 | 32.1 |
 
-This release changed `num_nextn_predict_layers` from **1 to 3**, which is why the drafter deserved
-a second look. It did not turn out to justify k=3.
+Counting numbers are a draft-acceptance ceiling, not throughput — see "How we quote numbers" in
+[`CURRENT.md`](../CURRENT.md). `num_nextn_predict_layers: 3` does not imply `k=3`: any `k=3`
+comparison run **without** the Patch 4 mount measures the loader rather than the drafter, because
+an uninitialised shared expert collapses acceptance to the loader's own signature
+([`DSPARK-SHARED-EXPERT-FIX.md`](../DSPARK-SHARED-EXPERT-FIX.md)). The launcher in this directory
+mounts Patch 4 ([PR #44](https://github.com/tonyd2wild/DeepSeek-v4-Flash-Vision-Exp-DSpark-1M-NVFP4-KV-2x-DGX-Spark/pull/44)).
+With the patch in place, `k=5` wins clearly on predictable work, and `k=3` keeps a small edge on
+prose.
 
-**RETRACTED — do not use these numbers.** The table below is the unpatched (no Patch 4)
-measurement, kept only as the record of what was originally published:
+### The limiter here is per-step cost, not speculation
 
-> | ~~count-to-300, temp 0~~ | ~~k=5~~ | ~~k=3~~ |
-> |---|---|---|
-> | ~~accept ratio~~ | ~~0.542~~ | ~~0.830~~ |
-> | ~~mean accepted length~~ | ~~3.71 / max 6 (62%)~~ | ~~3.49 / max 4 (87%)~~ |
-> | ~~throughput~~ | ~~52.1 tok/s~~ | ~~54.6 (peak 55.1)~~ |
-
-The 0.542 accept ratio at k=5 is the uninitialised shared-expert loader's signature, not a
-property of the vision drafter. **`MTP_NUM_TOKENS=5` is the validated setting**, matching the
-main recipe and what [`launchers/ds4-vision-tp2.sh`](../launchers/ds4-vision-tp2.sh) and
-[`launchers/ds4-vision-tp4.sh`](../launchers/ds4-vision-tp4.sh) pass.
-
-### Throughput is below the text-only build — known, not yet explained
-
-54.6 tok/s on count-to-300 (unpatched, see the correction above; with Patch 4 the same workload measured 85.5 tok/s in #48) sits under the ~70-80 the text-only 0731 recipe reaches.
-Decomposing: 54.6 / 3.49 accepted-per-step = **15.6 decode steps/sec**, versus ~20 needed
-for 70 tok/s at the same acceptance. Since the drafter is now running at 87% of its
-ceiling, **the gap is per-step cost, not speculation.** Two untested candidates:
+Acceptance is high on predictable work, so the headroom left on this build sits in decode step cost
+rather than in the drafter. Two candidates:
 
 1. **Vision tax.** This build sets `requires_raw_input_tokens = True` so the runner slices
-   and passes raw token ids every forward step (the text-only build does not), and the ViT
+   and passes raw token ids every forward step (the text-only path does not), and the ViT
    plus aligner stay resident on both ranks.
-2. **Context ceiling.** 1.5M means larger DSA indexer buffers per step than the 350K used in
-   the older "as running" block.
+2. **Context ceiling.** A larger `max_model_len` means larger DSA indexer buffers per step.
 
-A single reload at 350K with everything else held constant separates the two.
+A single reload at a smaller context with everything else held constant separates the two.
 
 ### Correctness spot-checks (temperature 0)
 
@@ -219,7 +224,7 @@ gate bias. Because every image slot carries the same placeholder id, hash routin
 them all to one expert — which is very likely the reason `bias_vl` exists. Correct handling
 needs modality threaded into the MoE gate.
 
-Neither affects text-only requests: with no image tokens the code path is identical to 0731.
+Neither affects text-only requests: with no image tokens the code path is the stock vLLM one.
 
 ## Run it
 
@@ -243,20 +248,21 @@ sudo rm -rf ~/.cache/vllm-dspark/modelinfos
 
 Everything from the base recipe is unchanged: `--kv-cache-dtype nvfp4_ds_mla`,
 `--block-size 256`, `draft_sample_method: probabilistic`, patch 3, and the full NCCL/env
-block. Use the validated agent-serving profile — **1M context (1,048,576), gmu 0.85, seqs 12, k=5** (k=5 with Patch 4 mounted; the earlier k=3 profile predates the Patch 4 fix). See [`CURRENT.md`](../CURRENT.md).
+block. Use the validated agent-serving profile — **1M context (1,048,576), gmu 0.85, seqs 12,
+k=5** — with the Patch 4 mount present on every node. See [`CURRENT.md`](../CURRENT.md).
 
-> **gmu 0.78 vs 0.85:** `DEFAULT-CONFIG.md` warns that 0.80 "boots and passes smoke tests,
-> then dies under traffic" (issue #8) because DSpark allocates buffers on the *first real
-> request*. The validated agent profile uses **0.85** and is the one measured here; 0.78
-> is the conservative single-lane value and yields a much smaller pool (1,482,106 tokens).
+> **gmu 0.85, not less.** Don't dial `--gpu-memory-utilization` down looking for headroom: 0.80
+> "boots and passes smoke tests, then dies under traffic" (issue #8), because DSpark allocates
+> buffers on the *first real request*. The validated agent profile is **0.85**, documented in
+> [`VISION-EXP-DEFAULT-CONFIG.md`](../VISION-EXP-DEFAULT-CONFIG.md).
 
 ## Prior art
 
 vLLM issue [#54561](https://github.com/vllm-project/vllm/issues/54561) and draft PR
-[#54566](https://github.com/vllm-project/vllm/pull/54566) both opened 2026-08-31 with a
-parallel implementation validated on 2x RTX PRO 6000. Their fixes for the hash-routing guard,
-OOV sentinels, and `bias_vl` are worth reading — this port reaches the same conclusions
-independently on several points. **What is new here is GB10 / DGX Spark**, where the
-[NVIDIA forum position that day](https://forums.developer.nvidia.com/t/deepseek-v4-flash-vision-exp-is-released-as-open-weights/381911)
-was that the native vLLM vision processor would not work with this model, and the previous
-answer for vision on Spark was a sidecar VLM rather than a port.
+[#54566](https://github.com/vllm-project/vllm/pull/54566) cover a parallel implementation
+validated on 2x RTX PRO 6000. Their fixes for the hash-routing guard, OOV sentinels, and
+`bias_vl` are worth reading — this port reaches the same conclusions independently on several
+points. **What is new here is GB10 / DGX Spark**: the
+[NVIDIA forum position](https://forums.developer.nvidia.com/t/deepseek-v4-flash-vision-exp-is-released-as-open-weights/381911)
+is that the native vLLM vision processor does not work with this model, and the standing answer
+for vision on Spark is a sidecar VLM rather than a port.

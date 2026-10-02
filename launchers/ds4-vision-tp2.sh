@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ds4-vision-tp2.sh <0|1>
 # DeepSeek-V4-Flash-Vision-Exp, TP2 across asusi (rank0/head) + bluey (rank1).
-# Config is byte-for-byte from tonyd2wild/DeepSeek-v4-Flash-0731-DSpark-1M-NVFP4-KV-2x-DGX-Spark
-# DEFAULT-CONFIG.md "Exact vLLM command (as running)", with only these adaptations:
+# The serving profile is the validated Vision-Exp 1M/TP2 config recorded in
+# CURRENT.md and VISION-EXP-DEFAULT-CONFIG.md, adapted for this fleet:
 #   * model path  -> the locally downloaded Vision-Exp checkpoint
 #   * rank map    -> asusi 192.168.192.3 (head) / bluey 192.168.192.1 (worker)
 #   * NCCL_IB_HCA / SOCKET_IFNAME -> this fleet's actual devices (the repo ships placeholders)

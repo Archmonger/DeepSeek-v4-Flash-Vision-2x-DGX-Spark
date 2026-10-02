@@ -8,8 +8,7 @@ overlay.
 
 The DSpark PR `vllm-project/vllm#46995` has merged into vLLM main and is in the
 right lane for the garble/concurrency issue. However, current official vLLM main
-does not yet boot this DeepSeek V4 Flash DSpark NVFP4 deployment on 2x DGX
-Spark/SM120.
+does not yet boot this NVFP4 DSpark deployment on 2x DGX Spark/SM120.
 
 The live production-safe lane remains:
 
@@ -63,7 +62,7 @@ Backend attempts failed before generation:
 
 ## Why This Is Not a One-Flag Fix
 
-DeepSeek V4 Flash enters official vLLM through the MXFP4 MoE path:
+DeepSeek V4 enters official vLLM through the MXFP4 MoE path:
 
 - `vllm/model_executor/layers/quantization/mxfp4.py`
 - `vllm/model_executor/layers/fused_moe/oracle/mxfp4.py`
@@ -75,7 +74,7 @@ currently wired for NVFP4, not DeepSeek V4's MXFP4 expert weights:
 - `vllm/model_executor/layers/fused_moe/oracle/nvfp4.py`
 
 That class asserts NVFP4 quantization and supports `kNvfp4Static`, while
-DeepSeek V4 Flash selects `kMxfp4Static`.
+DeepSeek V4 selects `kMxfp4Static`.
 
 The current stable runtime's missing MXFP4 bridge is represented by:
 
@@ -102,6 +101,5 @@ The likely compatibility overlay is not just PR `#46995`. It needs:
 ## Current Decision
 
 Do not point agents at stock official-main for this repo yet. It contains the
-right DSpark correctness work, but the GB10/SM120 DeepSeek V4 Flash NVFP4
-serving path still needs a compatibility port before it can replace the current
-runtime.
+right DSpark correctness work, but the GB10/SM120 NVFP4 DSpark serving path still
+needs a compatibility port before it can replace the current runtime.

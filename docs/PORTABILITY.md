@@ -3,7 +3,7 @@
 Notes from a clean-room bring-up on 2× DGX Spark (GB10 sm_121a, 200G CX7) that is
 not the machine this recipe was developed on. The recipe itself is correct — these
 are the places where a different host trips over an assumption. Numbers below were
-measured on the `deepseek-ai/DeepSeek-V4-Flash-0731` checkpoint with the Stage-C
+measured on this recipe (`deepseek-ai/DeepSeek-V4-Flash-Vision-Exp`) with the Stage-C
 runtime + the nvfp4 chain, DSpark k=5 probabilistic, 1M context.
 
 ## 1. `nvfp4_ds_mla` lives in the three-stage image, not the overlay
@@ -22,8 +22,8 @@ overlay. A one-line note near the build instructions would save the boot cycle.
 ## 2. The launcher uses the root compose file
 
 `start-deepseek-v4-flash-dspark.sh` defaults to `./docker-compose.dspark.yml`.
-Edits made to `verified-deployed-2026-07-04/docker-compose.dspark.yml` are silently
-ignored — easy to lose time on when both files exist and look equivalent.
+Edits made to any other copy of the compose file are silently ignored — easy to
+lose time on when two copies exist and look equivalent.
 
 ## 3. `GLOO_SOCKET_IFNAME` / `TP_SOCKET_IFNAME` are baked into the base image
 
@@ -80,7 +80,7 @@ nvidia-smi --query-gpu=clocks.sm,power.draw --format=csv,noheader
 ## 7. `--default-chat-template-kwargs '{"thinking":false}'`
 
 Not a bug — the recipe optimises for throughput. But it is worth stating loudly,
-because the checkpoint has no Jinja chat template (it ships `encoding/` scripts), so
+because the model ships no Jinja chat template (only `encoding/` scripts), so
 the only thing that turns reasoning back on is:
 
 ```json
@@ -101,7 +101,7 @@ every private test passes; plus a procedural seed-generated suite of 48 cases):
 The one-shot number goes *down* when reasoning is enabled — with an 8k cap the model
 spends the budget thinking and gets truncated. Every one of the nine failures was
 `finish_reason=length`, and all nine passed once retried with a 32k budget. Anyone
-benchmarking this checkpoint should report the thinking setting and retry
+benchmarking this recipe should report the thinking setting and retry
 length-capped failures, or the result measures the cap rather than the model.
 
 ## 8. Streamed reasoning field name
@@ -110,3 +110,5 @@ The runtime emits `delta.reasoning`; OpenAI-compatible clients expect
 `delta.reasoning_content`. Clients that render a reasoning panel sit on "Thinking…"
 until the whole response lands. A small translating proxy in front of the server is
 enough; noting it in the README would spare people the debugging.
+Reasoning-mode behaviour and the per-request overrides are covered in
+[`reasoning-mode.md`](reasoning-mode.md).

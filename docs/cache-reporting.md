@@ -15,3 +15,6 @@ Existing servers only pick up this change when the operator next recreates or
 restarts them. The accompanying CPU-only regression
 (`scripts/test-prompt-token-details.py`) checks the launch arguments on all three
 serve paths; it does not start a server or prove live cache reuse.
+
+Related: [CURRENT.md](../CURRENT.md) lists what each serve path passes, and
+[`PATCHES.md`](PATCHES.md) covers the KV-cache work behind the cached-token counts.

@@ -2,7 +2,7 @@
 """Patch vLLM's vendored deepseek_v4 model.py to accept the Vision-Exp checkpoint.
 
 DeepSeek-V4-Flash-Vision-Exp adds a 32-block ViT, a 2-layer aligner, and four
-special embeddings on top of DeepSeek-V4-Flash-0731. vLLM's DeepseekV4ForCausalLM
+special embeddings on top of the text-only DeepSeek V4 Flash backbone. vLLM's DeepseekV4ForCausalLM
 is the text-only class, so loading the vision checkpoint dies with:
 
     ValueError: There is no module or parameter named 'aligner' in DeepseekV4ForCausalLM
@@ -54,7 +54,7 @@ INIT_ANCHOR = "        self.hc_head_op = HCHeadOp()"
 INIT_BLOCK = """
         # --- Vision-Exp: tower + aligner + the four special embeddings ------
         # Present only when the checkpoint carries them, so this file still
-        # loads DeepSeek-V4-Flash-0731 (text-only) unchanged.
+        # loads a text-only DeepSeek V4 Flash checkpoint unchanged.
         self.vision = None
         self.aligner = None
         n_vision_layers = int(getattr(config, "vision_n_layers", 0) or 0)
@@ -105,8 +105,8 @@ LOADER_BLOCK = """            for param_name, weight_name, shard_id in stacked_p
                 # Skip non-stacked layers and experts (experts handled below)."""
 
 # 5. Vision-Exp's MoE gate carries a routing-correction bias on EVERY layer —
-# including the first `num_hash_layers` hash-MoE layers, which 0731 did not have
-# and which this file explicitly skips ("hash MoE doesn't use
+# including the first `num_hash_layers` hash-MoE layers, which the text-only
+# backbone does not have and which this file explicitly skips ("hash MoE doesn't use
 # e_score_correction_bias"). It also adds a SECOND bias, `bias_vl`, applied to
 # vision tokens, so experts are routed differently for image vs text tokens.
 # Both are new in this release and have no vLLM equivalent.
@@ -122,7 +122,7 @@ GATE_BLOCK = """        elif getattr(config, "topk_method", None) == "noaux_tc":
             )
 
         # --- Vision-Exp gate biases ----------------------------------------
-        # Guarded on vision_n_layers so text-only DeepSeek-V4-Flash-0731 keeps
+        # Guarded on vision_n_layers so text-only DeepSeek V4 keeps
         # exactly its previous behaviour (no bias on hash layers, no bias_vl).
         self.gate.e_score_correction_bias_vl = None
         if int(getattr(config, "vision_n_layers", 0) or 0) > 0:

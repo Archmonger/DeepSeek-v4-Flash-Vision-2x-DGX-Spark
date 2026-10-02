@@ -18,7 +18,9 @@ NAME=vllm_ds4_b_anemll
 MASTER=192.168.192.2
 MPORT=29625
 PORT=8889
-MODEL=/cache/huggingface/fraserprice/DeepSeek-V4-Flash-DSpark
+# Weights path is deliberately required: this lane serves whatever checkpoint you
+# point it at, and the right path varies per node (`--model` accepts a local dir).
+MODEL="${MODEL:?set MODEL to the weights directory this lane should serve}"
 
 # --- auto-detect this node's fabric identity (non-uniform HCA names across this fleet) ---
 MYIP=$(ip -o -4 addr show | grep -oE '192\.168\.192\.[0-9]+' | head -1)
@@ -43,7 +45,7 @@ MAXLEN="${DS4_MAXLEN:-1048576}"
 
 ARGS=(
   "$MODEL"
-  --served-model-name deepseek-v4-flash-dspark deepseek-v4-flash-spark deepseek-v4-flash
+  --served-model-name deepseek-v4-flash-dspark
   --host 0.0.0.0 --port "$PORT"
   --trust-remote-code
   --tensor-parallel-size 2 --pipeline-parallel-size 1

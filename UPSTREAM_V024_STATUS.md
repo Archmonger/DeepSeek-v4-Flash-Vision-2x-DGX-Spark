@@ -30,7 +30,7 @@ The safe upgrade lane is:
    `vllm-dspark-runtime:dspark-v024-nvfp4-stage-c`.
 3. Start from vLLM current main or a release that includes PR `#46995`.
 4. Re-port the GB10/SM120 survival pieces that stock official vLLM is still
-   missing for this checkpoint.
+   missing for this recipe.
 5. Re-port this repo's `nvfp4_ds_mla` and Keys concurrency overlay, or prove the
    official replacement handles the same 1M/NVFP4/2-6 concurrency traffic.
 6. Validate at 262K/fp8 first, then 1M/NVFP4, then 2/4/6 concurrency.
@@ -65,9 +65,8 @@ On 2026-07-01, current vLLM main containing merge commit
 `f5a8d73377d0f0a4e00cba172f9fbd0d50471b07` for PR `#46995` was built and tested
 as `vllm-dspark-runtime:official-main-dspark-00eb7ce`.
 
-It imported the DSpark modules successfully, but did not boot this DeepSeek V4
-Flash DSpark checkpoint on 2x DGX Spark/SM120. Backend attempts failed before
-generation:
+It imported the DSpark modules successfully, but did not boot this NVFP4 DSpark
+deployment on 2x DGX Spark/SM120. Backend attempts failed before generation:
 
 - auto/DeepGEMM: `Unknown SF transformation`
 - DeepGEMM disabled with Marlin fallback: unsupported PTX/toolchain error in
@@ -95,10 +94,10 @@ The prototype adds the two missing compatibility bridges found during testing:
 - Official-main MXFP4 MoE can map `flashinfer_b12x` to a B12X MXFP4 expert
   implementation.
 
-The image passed import/runtime smoke checks for `nvfp4_ds_mla` dtype
-resolution and B12X MXFP4 oracle selection. It has not yet passed full
-DeepSeek V4 Flash model boot, direct generation, or 2/4/6 concurrency. Keep the
-current known-good v0.21/Keys image as the default until those gates pass.
+The image passed import/runtime smoke checks for `nvfp4_ds_mla` dtype resolution
+and B12X MXFP4 oracle selection. It has not yet passed full model boot, direct
+generation, or 2/4/6 concurrency. Keep the current known-good v0.21/Keys image as
+the default until those gates pass.
 
 Prototype artifacts:
 

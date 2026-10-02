@@ -177,7 +177,7 @@ class DS4VProcessingInfo(BaseProcessingInfo):
         return self.ctx.model_config.hf_config
 
     def get_supported_mm_limits(self) -> Mapping[str, int | None]:
-        # Registration is class-level, so text-only DeepSeek-V4-Flash-0731 also
+        # Registration is class-level, so a text-only DeepSeek V4 checkpoint also
         # lands here. Report zero image support when the checkpoint has no
         # vision tower, which keeps it a pure text model.
         cfg = self.get_hf_config()

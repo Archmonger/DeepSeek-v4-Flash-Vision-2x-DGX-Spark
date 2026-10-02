@@ -81,7 +81,7 @@ COMPOSE_DISABLE_ENV_FILE=1 NODE_RANK=0 HEADLESS= docker compose --env-file "$ENV
 echo "Waiting for DSpark vLLM API..."
 for _ in $(seq 1 "$WAIT_ATTEMPTS"); do
   if curl -fsS --max-time 5 "$API_URL" >/dev/null; then
-    echo "DeepSeek V4 Flash DSpark is running: $API_URL"
+    echo "DeepSeek V4 Flash Vision-Exp is running: $API_URL"
     COMPOSE_DISABLE_ENV_FILE=1 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
     ssh "$WORKER_HOST" "$REMOTE_COMPOSE docker compose --env-file .env.dspark -f docker-compose.dspark.yml ps"
     echo "Running minimal OpenAI-compatible chat request..."

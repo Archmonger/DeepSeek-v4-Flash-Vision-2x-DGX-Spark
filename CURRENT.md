@@ -79,32 +79,21 @@ something we pin.
 
 ---
 
-## Do not use
+## Repo conventions
 
-**Do not use the following as a recipe.** These are dated status notes and superseded snapshots.
-They will move under `archive/` in the next cleanup commit; **nothing is being deleted**, and
-nothing a PR or issue links to changes path — `vision-exp/ds4-vision-tp2.sh` stays as a symlink to
-`launchers/ds4-vision-tp2.sh` for exactly that reason.
-
-- Dated status / point-in-time notes: `SPEED-UPDATE-2026-07-16.md`, `SPEED-UPDATE-2026-07-29.md`,
-  `RUNTIME-BAKEOFF-2026-07-29.md`, `KAI-DS4-UPDATE-NOTE.md`, `OFFICIAL_MAIN_PORT_PLAN.md`,
-  `UPSTREAM_V024_STATUS.md`, `AGENT_GARBLE_FIX.md`, `verified-deployed-2026-07-04/`.
-- Any `MTP_NUM_TOKENS=3` / `k=3` guidance anywhere in this repo. That A/B was measured without the
-  Patch 4 mount, which silently collapses draft acceptance. It is retracted (issue #48). **k=5.**
-- Any `MAX_MODEL_LEN=1500000` guidance, including the KV/context figures still carried in
-  `vision-exp/README.md`'s "Measured" table. Standard is **1,048,576**.
-
-**Two things stay put and are NOT archive candidates:**
-
-1. **The text-lane 0731 compose recipe** — `DEFAULT-CONFIG.md`, `docker-compose.dspark.yml`,
-   `.env.dspark.example`, and the root `*-deepseek-v4-flash-dspark.sh` / `validate-dspark-config.sh`
-   scripts. That is a **second documented recipe** for the text checkpoint, still supported, and it
-   stays exactly where it is unless the archive commit says otherwise. It is not the vision recipe:
-   if you are serving the vision build, use the launchers above.
-2. **`sparkrun/`** — the self-contained sparkrun recipes for both checkpoints, and **`parity/`**.
-
-The self-contained `sparkrun/` recipe serves under the id `deepseek-v4-flash-vision-exp`; the launchers here serve `deepseek-v4-flash-dspark`. Clients pointed at :8888 use the launcher's id.
+- **The vision launchers in `launchers/` are the supported path** —
+  `launchers/ds4-vision-tp2.sh` and `launchers/ds4-vision-tp4.sh`, which is what the tables above
+  describe.
+- **`sparkrun/` carries a self-contained Vision-Exp recipe** that rebuilds the same runtime
+  in-container ([`sparkrun/README.md`](sparkrun/README.md)). It serves under the id
+  `deepseek-v4-flash-vision-exp`; the launchers serve `deepseek-v4-flash-dspark`. Clients pointed
+  at `:8888` use the launcher's id.
+- **The Compose files are the generic two-node serve/build configuration**:
+  `docker-compose.dspark.yml` plus `.env.dspark.example` — the template for the
+  `.env.dspark` that `build-dspark-vllm-runtime.sh` also sources.
+- **Serving is k=5 probabilistic DSpark at `--max-model-len 1048576`.**
+- **Vision-Exp is the only supported model.**
 
 <!-- launcher hashes, maintained by tools/check-current.sh --write -->
-sha256 8c9b49aac895fdba5637481f9c6c6f0d1a23426c1fe514e5accbfa6c9bbd323b  launchers/ds4-vision-tp2.sh
+sha256 5da63670fcff7f7ac6d5397768a61e878bd11f604acbe7054f1d763ca4e70e8a  launchers/ds4-vision-tp2.sh
 sha256 d8db4e958800389585f3c9c897084649cfc22e51e5d01524635f942bd2d3fe21  launchers/ds4-vision-tp4.sh

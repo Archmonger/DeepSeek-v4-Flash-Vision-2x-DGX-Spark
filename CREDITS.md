@@ -25,10 +25,10 @@ The scheduler-level root cause of the cold-resume garble (prompt echo / leaked
 tool-schema text at the start of a reply on long resumed conversations) was tracked
 down and fixed as a collaboration between **Roady001** and **Fable**:
 
-- **Roady001** — reported the issue (that the 2026-07-03 launch/config change only
-  reduced the symptom and did not address the root cause) and independently validated
+- **Roady001** — reported the issue: the launch/config workarounds in circulation
+  only reduce the symptom and do not address the root cause. He independently validated
   the final fix on his own 2x DGX Spark, confirming the garble is gone without any of
-  the earlier config workarounds.
+  the earlier config changes.
   Issue: https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-1M-NVFP4-KV-2x-DGX-Spark/issues/3
 - **Fable** — the root-cause analysis and the patch: a guard in
   `Scheduler.update_from_output` so spec-token placeholders are only resized on genuine
@@ -43,10 +43,11 @@ See `docs/PATCHES.md` (Patch 3) for the full analysis.
 ## CUDA-Graph Capture-Size Fix (concurrency throughput)
 
 **Wpnx330** found and fixed a silent throughput cliff: `--max-cudagraph-capture-size`
-must be a multiple of `(num_speculative_tokens + 1)`, so passing a raw `MAX_NUM_SEQS`
-(6) with spec=3 floored the captured size to 4 — enough for one active request. Any
-concurrency above that fell off the captured CUDA-graph path into eager/piecewise and
-throughput collapsed to <1 tok/s. Fix: `--max-cudagraph-capture-size $((MAX_NUM_SEQS * (MTP_NUM_TOKENS + 1)))`.
+must be a multiple of `(MTP_NUM_TOKENS + 1)`. Passing a raw `MAX_NUM_SEQS` that isn't
+gets floored down to the largest multiple below it — potentially to a single request's
+worth of captured graph — and any concurrency above that falls off the captured CUDA-graph
+path into eager/piecewise, where throughput collapses. Fix:
+`--max-cudagraph-capture-size $((MAX_NUM_SEQS * (MTP_NUM_TOKENS + 1)))`.
 
 - PR: https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-1M-NVFP4-KV-2x-DGX-Spark/pull/5
 
@@ -58,12 +59,11 @@ recipe builds on:
 - https://github.com/rafaelcaricio/vllm/pull/1
 - https://github.com/rafaelcaricio/spark_vllm_docker/pull/1
 
-## Model And Runtime Work
+## DSpark Draft-Loading Work
 
-Fraser Price published the DeepSeek V4 Flash DSpark model/runtime work used by
-this recipe:
+Fraser Price published the DSpark-on-vLLM drafter integration and draft-weight loading
+work that this recipe's runtime builds on:
 
-- https://huggingface.co/fraserprice/DeepSeek-V4-Flash-DSpark
 - https://github.com/fraserprice/dspark-vllm
 
 ## Two-Node DGX Spark Packaging
@@ -80,7 +80,7 @@ This work also relies on:
 - vLLM
 - FlashInfer
 - NVIDIA CUDA/NCCL/Blackwell tooling
-- DeepSeek V4 Flash
+- `DeepSeek-V4-Flash-Vision-Exp` and the DeepSeek V4 architecture
 - DeepSeek-AI DeepSpec / DSpark speculative decoding research
 
 ## TonyD2Wild Contribution
@@ -102,7 +102,7 @@ and Triton are separate upstream artifacts with their own licenses and terms.
 ## 0rand
 
 - Parameterized the API port (`VLLM_PORT`, PR #1).
-- Independently identified MTP=5 speculation garbling and proposed the MTP=3 default in PR #1 (2026-06-30) — four days before the 2026-07-03 garble fix adopted the same value on main. Early, correct call.
+- Independently identified speculation-linked output garbling and proposed a shallower draft depth in PR #1. The durable fix is the scheduler-level guard in Patch 3, and the validated draft depth here is `k=5` (see [`docs/PATCHES.md`](docs/PATCHES.md)).
 
 ## paulbrav
 

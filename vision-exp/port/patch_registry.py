@@ -8,14 +8,15 @@ processor registered, the API server still refuses images with:
 
     "<model> is not a multimodal model"
 
-The Vision-Exp checkpoint reports the SAME `architectures` string as text-only
-0731, so the name cannot simply be moved — that would break 0731. Instead we add
+The Vision-Exp checkpoint reports the SAME `architectures` string as the
+text-only DeepSeek V4 model, so the name cannot simply be moved — that would
+break text-only serving. Instead we add
 an ALIAS in `_MULTIMODAL_MODELS` pointing at the same (patched) class, and select
 it for the vision checkpoint with:
 
     --hf-overrides '{"architectures":["DeepseekV4VForConditionalGeneration"]}'
 
-Text-only 0731 keeps resolving through the untouched text-generation entry.
+Text-only DeepSeek V4 keeps resolving through the untouched text-generation entry.
 This mirrors the approach taken upstream in vllm-project/vllm#54561 / #54566.
 
 Usage: patch_registry.py <path-to-registry.py>
