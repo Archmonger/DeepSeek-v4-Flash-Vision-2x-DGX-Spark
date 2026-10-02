@@ -82,6 +82,7 @@ is:
   --max-cudagraph-capture-size 12 \
   --gpu-memory-utilization 0.85 \
   --enable-prefix-caching \
+  --enable-prompt-tokens-details \
   --async-scheduling \
   --enable-chunked-prefill \
   --speculative-config '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic"}' \

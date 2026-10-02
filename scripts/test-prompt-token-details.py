@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CPU-only regression for the Compose serve argv shared by both ranks."""
+"""CPU-only regression for every serve argv in this repo (Compose + shell launchers)."""
 import shlex
 import unittest
 from pathlib import Path
@@ -19,6 +19,23 @@ class PromptTokenDetailsTests(unittest.TestCase):
         self.assertNotIn("--no-enable-prompt-tokens-details", argv)
         self.assertIn("${NODE_RANK}", argv)
         self.assertIn("${HEADLESS:+--headless}", argv)
+
+    # Upstream PR #56 only touched docker-compose.dspark.yml, which left the shell
+    # launchers reporting no cached_tokens. These cover the other serve paths so the
+    # two cannot drift apart again.
+    LAUNCHERS = (
+        "launchers/ds4-vision-tp2.sh",
+        "launchers/ds4-vision-tp4.sh",
+    )
+
+    def test_launcher_serve_args(self):
+        for rel in self.LAUNCHERS:
+            with self.subTest(launcher=rel):
+                source = (ROOT / rel).read_text()
+                self.assertEqual(source.count("--enable-prefix-caching"), 1)
+                self.assertEqual(source.count("--enable-prompt-tokens-details"), 1)
+                self.assertEqual(source.count("--enable-prompt-token-details"), 0)
+                self.assertEqual(source.count("--no-enable-prompt-tokens-details"), 0)
 
 
 if __name__ == "__main__":

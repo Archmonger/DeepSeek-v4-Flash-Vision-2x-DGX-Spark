@@ -124,6 +124,7 @@ docker run -d --name "$NAME" --restart no \
       --max-cudagraph-capture-size 12 \
       --gpu-memory-utilization 0.85 \
       --enable-prefix-caching \
+      --enable-prompt-tokens-details \
       --async-scheduling \
       --enable-chunked-prefill \
       --speculative-config '$SPEC' \

@@ -10,7 +10,12 @@ sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -c1-6
 launchers=$( { ls launchers/*.sh 2>/dev/null; ls launch-*.sh 2>/dev/null; } | sort -u)
 if [ "${1:-}" = "--write" ]; then
   tmp=$(mktemp)
-  grep -vE '^sha256 [0-9a-f]{64}  ' CURRENT.md > "$tmp"
+  # Strip the previous hash block, marker comment and trailing blank lines included, so
+  # repeated --write runs leave exactly one block instead of stacking a copy of the
+  # comment and an extra blank line each time.
+  grep -vE '^sha256 [0-9a-f]{64}  ' CURRENT.md \
+    | grep -vF '<!-- launcher hashes, maintained by tools/check-current.sh --write -->' \
+    | awk '/^[[:space:]]*$/{blanks++; next} {for (i = 0; i < blanks; i++) print ""; blanks = 0; print}' > "$tmp"
   { cat "$tmp"; echo; echo "<!-- launcher hashes, maintained by tools/check-current.sh --write -->"; for f in $launchers; do echo "sha256 $(sha "$f")  $f"; done; } > CURRENT.md
   rm -f "$tmp"; echo "CURRENT.md hashes written for: $launchers"; exit 0
 fi

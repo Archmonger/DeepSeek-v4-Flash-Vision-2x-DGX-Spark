@@ -40,6 +40,9 @@ Both launchers read `MODEL_DIR` (default `DeepSeek-V4-Flash-Vision-Exp`); the un
   `VLLM_SWA_RECYCLE_SKIPPED_BLOCKS=${SWA_RECYCLE:-1}`. Measured on TP2: a 354K-token prompt
   re-sent after another 354K prefill hits 100% in 1.2 s (stock image: 0%, 235 s cold re-prefill);
   logs in `docs/patch6-validation/`, analysis in `docs/PATCH6-KV-CACHE-PREFIX-EVICTION.md`.
+- Both launchers and `docker-compose.dspark.yml` pass `--enable-prompt-tokens-details`,
+  so clients can read `usage.prompt_tokens_details.cached_tokens`
+  (see [`docs/cache-reporting.md`](docs/cache-reporting.md)).
 - Workers mount Bluey's weights export at `/mnt/bluey-models`.
 - **Drop page cache on all four nodes before launch.**
 
@@ -103,7 +106,5 @@ nothing a PR or issue links to changes path — `vision-exp/ds4-vision-tp2.sh` s
 The self-contained `sparkrun/` recipe serves under the id `deepseek-v4-flash-vision-exp`; the launchers here serve `deepseek-v4-flash-dspark`. Clients pointed at :8888 use the launcher's id.
 
 <!-- launcher hashes, maintained by tools/check-current.sh --write -->
-
-<!-- launcher hashes, maintained by tools/check-current.sh --write -->
-sha256 63a5f6c3ea32ecf764f76ac32ef7307dd637430301eab0ffc9bf0dbdd5d40531  launchers/ds4-vision-tp2.sh
-sha256 50b33b978f9c96ed318907519ff3f4e60abf15fb762c90345852e3c2cae1b266  launchers/ds4-vision-tp4.sh
+sha256 8c9b49aac895fdba5637481f9c6c6f0d1a23426c1fe514e5accbfa6c9bbd323b  launchers/ds4-vision-tp2.sh
+sha256 d8db4e958800389585f3c9c897084649cfc22e51e5d01524635f942bd2d3fe21  launchers/ds4-vision-tp4.sh
