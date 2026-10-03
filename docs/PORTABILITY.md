@@ -72,12 +72,12 @@ nvidia-smi --query-gpu=clocks.sm,power.draw --format=csv,noheader
 # asymmetry between the two nodes => this
 ```
 
-## 6. Thinking is off by default, and that is measurable
+## 6. Thinking is on by default, and it is worth the tokens
 
-`--default-chat-template-kwargs '{"thinking":false}'` is a throughput choice, not a bug.
-Know it before comparing a local deployment with a hosted one: turning reasoning on moves
-graded quality materially (procedural suite 0.875 → 0.979), and a low output cap makes
-thinking look *worse* rather than better — every length-capped failure in our run passed
-once retried at 32k. Measured tables, the `reasoning` vs `reasoning_content` field-name
-gotcha, and the per-request overrides are all in
-[`REASONING-MODE.md`](REASONING-MODE.md).
+The launchers and recipes all pass `--default-chat-template-kwargs '{"thinking":true}'`. On the
+execution-graded suite that is 0.875 → 0.979 (procedural, 48 cases) for the extra decode cost.
+Two consequences for anyone comparing this box with another deployment: reasoning is returned on
+`message.reasoning` / `delta.reasoning` and **never** on `reasoning_content`, and reasoning
+consumes `max_tokens` before any content is produced — at an 8K cap the graded failures were all
+`finish_reason: length` and every one passed at 32K. Override per request with
+`chat_template_kwargs: {"thinking": false}`.

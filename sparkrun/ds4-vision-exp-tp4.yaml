@@ -1,0 +1,262 @@
+# DeepSeek-V4-Flash-Vision-Exp — TP4 (4x DGX Spark) — PRIMARY RUN PATH
+#
+# One-command deployment of the golden recipe. This recipe is a 1:1 match with
+# scripts/launch/ds4-vision-tp4.sh: same patch set, same vllm serve argv, same env.
+# The line-by-line parity list, every deliberate deviation, and what to verify after a
+# boot all live in ../docs/SPARKRUN-PARITY.md — read that before changing this file.
+#
+# Runtime is reproduced IN the container by scripts/build/stage-dspark-runtime.sh:
+# DSpark overlay + NVFP4 stage A/B/C + Patch 3/4/6 + the vision port, all fetched from
+# THIS repo at {ds4_src_commit}. No image build, no private registry, and pre_exec
+# fail-fasts if any patch failed to land.
+#
+# Non-obvious invariants (full reasoning in docs/PATCHES.md and docs/LAUNCH-FLAGS.md):
+#   * VLLM_USE_B12X_MOE=1 is mandatory; =0 silently falls back to DEEPGEMM_MXFP4 at
+#     roughly half throughput.
+#   * No --override-generation-config / repetition_penalty: on the DSpark path that is an
+#     illegal-memory-access crash, not a garble fix.
+#   * No VLLM_USE_V2_MODEL_RUNNER=1 (hard reject with DSpark).
+#   * --hf-overrides selects the multimodal registry alias; without it vLLM answers
+#     "is not a multimodal model" and image requests die.
+#   * All seven JIT/compile caches are node-LOCAL. Sharing them between the two ranks over
+#     NFS races torch.compile, DeepGEMM and FlashInfer.
+#   * max_cudagraph_capture_size is a multiple of 1+k and >= max_num_seqs (k=5 here:
+#     66 = 11x6, the smallest bucket covering 64 sequences). Asserted by
+#     scripts/check/test-prompt-token-details.py.
+#   * NO post_exec / post_commands on purpose: sparkrun v0.2.40 runs post hooks before it
+#     starts following logs, gated on a hardcoded ~4-minute port-readiness timeout. This
+#     model needs ~5-6 min to open the port, so any post hook reports "Server port never
+#     became ready" against a cluster that actually booted fine. Use
+#     scripts/bench/speedtest-starfall.sh against the running server instead.
+
+recipe_version: "2"
+model: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
+# The checkpoint pin from CURRENT.md. Bump here, not in prose.
+model_revision: 86f746b36186f0e567729a5c06a8c918caba82a9
+runtime: vllm
+# Public, digest-pinned base. This repo's fleet runs
+# vllm-dspark-runtime:mia-raf-pr1-nvfp4-probe-c-keys-concurrency-p2b, which is not
+# published; run `sparkrun run <this recipe> --image <that ref>` to use it directly and
+# skip the in-container staging. Verified equivalent: docs/SPARKRUN-PARITY.md.
+container: ghcr.io/bjk110/vllm-spark@sha256:d8492e7677cf1b9aaa3344e0e6865efc468454013eee5ebabac85be90af027be
+min_nodes: 4
+max_nodes: 4
+
+metadata:
+  description: >-
+    Vision-Exp (native image input) on 4x DGX Spark, TP=4: 1M context, nvfp4_ds_mla KV,
+    B12X MoE, DSpark k=5 probabilistic, Patches 3/4/6, vision port, thinking on by
+    default. 1:1 with scripts/launch/ds4-vision-tp4.sh.
+  maintainer: Archmonger
+  category: agent
+  kv_dtype: nvfp4
+
+defaults:
+  # --- payload source for pre_exec ---
+  ds4_repo: Archmonger/DeepSeek-v4-Flash-Vision-2x-DGX-Spark
+  ds4_src_commit: 3b60ee9a0c4c53490a7ab99aa83a92dcbb5cf288
+
+  # --- serve identity ---
+  port: 8888
+  host: 0.0.0.0
+  # Matches the launcher, not the model repo id: clients on :8888 must see the same
+  # name on the sparkrun path and the launcher path.
+  served_model_name: deepseek-v4-flash-dspark
+
+  # --- parallelism ---
+  tensor_parallel: 4
+  pipeline_parallel: 1
+
+  # --- memory / context ---
+  kv_cache_dtype: nvfp4_ds_mla
+  block_size: 256
+  max_model_len: 1048576
+  gpu_memory_utilization: 0.85
+  max_num_seqs: 64
+  max_num_batched_tokens: 8192
+  # 66 = 11 x (1+k), the smallest bucket that covers 64 sequences. A value that is not a
+  # multiple of 1+k floors to the bucket below and drops the excess requests off the captured
+  # CUDA-graph path silently -- that is exactly what 64 used to do here.
+  max_cudagraph_capture_size: 66
+
+  # --- tokenizer / parsers / spec decode ---
+  tokenizer_mode: deepseek_v4
+  tool_call_parser: deepseek_v4
+  reasoning_parser: deepseek_v4
+  speculative_config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic"}'
+  reasoning_config: '{"reasoning_parser":"deepseek_v4","reasoning_start_str":"<think>","reasoning_end_str":"</think>"}'
+  chat_template_kwargs: '{"thinking":true}'
+
+env:
+  # The launcher does not download weights (it bind-mounts them), but sparkrun does, and Xet
+  # transfers are unreliable at 167 GB on this fabric.
+  HF_HUB_DISABLE_XET: "1"
+
+  # --- node-local JIT/compile caches (sparkrun's per-host runtime cache) ---
+  # The launcher binds a dedicated /vllm-cache volume; sparkrun mounts ~/.cache/sparkrun/runtime-cache
+  # at /cache/runtime instead. Same requirement, different path. Never point these at a
+  # shared HF cache: both TP ranks JIT into the same directories and race.
+  VLLM_CACHE_ROOT: /cache/runtime/vllm-cache
+  DG_JIT_CACHE_DIR: /cache/runtime/deepgemm-cache
+  FLASHINFER_WORKSPACE_BASE: /cache/runtime/flashinfer
+  TILELANG_CACHE_DIR: /cache/runtime/tilelang
+  TORCHINDUCTOR_CACHE_DIR: /cache/runtime/torchinductor-cache
+  TRITON_CACHE_DIR: /cache/runtime/triton-cache
+  TORCH_EXTENSIONS_DIR: /cache/runtime/torch_extensions
+  TILELANG_CLEANUP_TEMP_FILES: "1"
+  DG_JIT_USE_NVRTC: "0"
+  DG_JIT_NVCC_COMPILER: /opt/env/bin/nvcc
+
+  # --- boot timeout ---
+  VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+  # NOTE: the TP4 launcher does not set VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS (TP2 sets 1800).
+  # This recipe mirrors its launcher exactly; the launcher self-asymmetry is recorded in
+  # docs/SPARKRUN-PARITY.md §5 rather than silently normalised away.
+
+  # --- model / attention ---
+  VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+  VLLM_TRITON_MLA_SPARSE: "1"
+  VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "256"
+  VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+  VLLM_SKIP_INIT_MEMORY_CHECK: "1"
+  VLLM_USE_FLASHINFER_SAMPLER: "1"
+
+  # --- B12X MoE (mandatory; =0 is a silent half-speed fallback) ---
+  VLLM_USE_B12X_MOE: "1"
+  VLLM_USE_B12X_WO_PROJECTION: "1"
+  VLLM_B12X_W4A16_FORCE_BLOCKS_PER_SM: "0"
+  VLLM_B12X_W4A16_FORCE_BLOCKS_MAX_M: "16"
+  B12X_W4A16_TC_DECODE: "0"
+  VLLM_DSV4_B12X_COMPRESSED_MLA: "0"
+
+  # --- DSpark behaviour ---
+  VLLM_DSPARK_CONFIDENCE_THRESHOLD: "0.0"
+  VLLM_DSPARK_CONFIDENCE_SCHEDULER: "off"
+  VLLM_DSPARK_LOCAL_ARGMAX: "1"
+  VLLM_DSPARK_REPLICATE_MARKOV_W1: "1"
+  VLLM_DSPARK_FUSED_MARKOV_ARGMAX: "0"
+  VLLM_DSPARK_GPU_REJECTED_CONTEXT_MASK: "1"
+  VLLM_DSPARK_REFERENCE_KV_QUANT_DEQUANT: "0"
+  VLLM_DSPARK_HARDWARE_SCHEDULER_EARLY_STOP: "1"
+  VLLM_DSV4_DSPARK_DEFER_TARGET_CAPTURE: "0"
+  VLLM_DSV4_DSPARK_DEFER_TARGET_CAPTURE_EXACT: "0"
+  DSPARK_SLOT_CLAMP: "1"
+  # TP4 carries this explicitly; the TP2 launcher omits it (see parity doc §5).
+  MTP_NUM_TOKENS: "5"
+
+  # --- Patch 6 (#54) tuning: keeps the prefix cache alive on long conversations ---
+  VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION: "0.30"
+  VLLM_SWA_RECYCLE_SKIPPED_BLOCKS: "1"
+
+  # --- arch pins ---
+  TORCH_CUDA_ARCH_LIST: "12.1a"
+  FLASHINFER_CUDA_ARCH_LIST: "12.1a"
+  FLASHINFER_DISABLE_VERSION_CHECK: "1"
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+
+  # --- fabric: the portable half ---
+  # NCCL_IB_HCA / NCCL_SOCKET_IFNAME / GLOO_SOCKET_IFNAME / TP_SOCKET_IFNAME and the RoCE
+  # GID are injected per host by sparkrun's fabric detection and are deliberately NOT set
+  # here. If detection picks a fabric this fleet cannot use, pin them with `-o env.NCCL_IB_HCA=...`.
+  NCCL_NET: IB
+  NCCL_IB_DISABLE: "0"
+  NCCL_CROSS_NIC: "0"
+  NCCL_IB_MERGE_NICS: "0"
+  NCCL_CUMEM_ENABLE: "0"
+  NCCL_IGNORE_CPU_AFFINITY: "1"
+  NCCL_DEBUG: WARN
+  NCCL_NVLS_ENABLE: "0"
+
+executor_config:
+  # Parity with the launcher: --shm-size 64g, memlock unlimited, big stack, IB visible,
+  # host networking, no --restart (containers stay for inspection).
+  shm_size: 64gb
+  network: host
+  privileged: false
+  devices:
+    - /dev/infiniband
+  ulimit:
+    - memlock=-1:-1
+    - stack=67108864
+  restart_policy: "no"
+  # Deliberate deviation from the launcher's `--ipc host`, not an oversight: sparkrun runs
+  # the container as the SSH user, and under a host IPC namespace systemd-logind's
+  # RemoveIPC reaper deletes the workload's POSIX semaphores ~10 s after the launching
+  # session closes, killing long-starting engines. A container-private namespace of the same
+  # size needs nothing from the host. docs/SPARKRUN-PARITY.md.
+  ipc: shareable
+
+pre_exec:
+  # Fetch this repo at the pinned commit, then stage the runtime in place. The staging script
+  # is the single place the patch set is defined for the sparkrun path; it verifies Patch 3,
+  # Patch 4, Patch 6, the vision-port alias and a real import before returning.
+  - |
+    set -eu
+    SRC=/tmp/ds4-src
+    if [ -e "/tmp/.ds4-src-{ds4_src_commit}" ]; then
+      echo "[stage] source tree for {ds4_src_commit} already fetched"
+    else
+      echo "[stage] fetching {ds_repo} @ {ds4_src_commit}"
+      rm -rf "$SRC" /tmp/ds4-src.tar.gz
+      mkdir -p "$SRC"
+      /opt/env/bin/python -c "import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])" \
+        "https://codeload.github.com/{ds_repo}/tar.gz/{ds4_src_commit}" /tmp/ds4-src.tar.gz
+      tar -xzf /tmp/ds4-src.tar.gz -C "$SRC" --strip-components=1
+      touch "/tmp/.ds4-src-{ds4_src_commit}"
+    fi
+    export VLLM_CACHE_ROOT
+    bash "$SRC/scripts/build/stage-dspark-runtime.sh" "$SRC" "{ds4_src_commit}"
+
+# Coding-flavoured benchmark corpus: llama-benchy's default is a novel, which under-reports
+# this model on code work. Ignore depth-32K cells at concurrency >1 unless you raise tg, or
+# you are measuring the chunked-prefill storm rather than decode. Warm up first.
+benchmark:
+  framework: llama-benchy
+  timeout: 7200
+  args:
+    pp: [2048]
+    tg: [128]
+    depth: [0, 32768]
+    concurrency: [1, 2, 6]
+    runs: 2
+    book_url: https://raw.githubusercontent.com/microsoft/TypeScript/v5.5.4/src/compiler/checker.ts
+    served_model_name: deepseek-v4-flash-dspark
+
+# Mirrors scripts/launch/ds4-vision-tp4.sh flag for flag. sparkrun's vllm-distributed
+# runtime appends --nnodes / --node-rank / --master-addr / --master-port (and --headless on
+# every rank but the head), so they are intentionally absent here. Launch order is handled by
+# sparkrun; the launcher's manual worker-first ordering (3, 2, 1, then 0) is its problem, not
+# this recipe's.
+command: |
+  export PATH=/opt/env/bin:/opt/env/nvvm/bin:/opt/env/targets/sbsa-linux/nvvm/bin:$PATH &&
+  export CUDA_HOME=/opt/env/targets/sbsa-linux CUDA_PATH=/opt/env/targets/sbsa-linux CUDAToolkit_ROOT=/opt/env/targets/sbsa-linux &&
+  export LD_LIBRARY_PATH=/opt/env/lib:/opt/env/targets/sbsa-linux/lib:$LD_LIBRARY_PATH &&
+  /opt/env/bin/vllm serve {model} \
+    --hf-overrides '{"architectures":["DeepseekV4VForConditionalGeneration"]}' \
+    --served-model-name {served_model_name} \
+    --host {host} \
+    --port {port} \
+    --trust-remote-code \
+    --tensor-parallel-size {tensor_parallel} \
+    --pipeline-parallel-size {pipeline_parallel} \
+    --kv-cache-dtype {kv_cache_dtype} \
+    --block-size {block_size} \
+    --max-model-len {max_model_len} \
+    --max-num-seqs {max_num_seqs} \
+    --max-num-batched-tokens {max_num_batched_tokens} \
+    --max-cudagraph-capture-size {max_cudagraph_capture_size} \
+    --gpu-memory-utilization {gpu_memory_utilization} \
+    --enable-prefix-caching \
+    --enable-prompt-tokens-details \
+    --async-scheduling \
+    --enable-chunked-prefill \
+    --speculative-config '{speculative_config}' \
+    --tokenizer-mode {tokenizer_mode} \
+    --distributed-executor-backend mp \
+    --tool-call-parser {tool_call_parser} \
+    --enable-auto-tool-choice \
+    --reasoning-parser {reasoning_parser} \
+    --reasoning-config '{reasoning_config}' \
+    --default-chat-template-kwargs '{chat_template_kwargs}' \
+    --generation-config vllm \
+    --enable-flashinfer-autotune

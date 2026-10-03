@@ -551,8 +551,8 @@ and the in-place port
 ### Symptom
 
 A harness that sends `stop` sequences (lm-evaluation-harness sends `stop[:4]` on **every**
-request) silently loses answers. Generation starts *inside* `<|im_start|>`, chain-of-thought
-naturally restates phrases like `Question:`, the stop fires mid-reasoning, `<|im_end|>` never
+request) silently loses answers. Generation starts *inside* `<think>`, chain-of-thought
+naturally restates phrases like `Question:`, the stop fires mid-reasoning, `</think>` never
 arrives, and the reasoning parser returns `content: null`. The request looks like a model
 failure; it is a serving-layer one. Hosted deployments of the same model are immune because
 they scope stops to content.
@@ -573,8 +573,8 @@ container start:
 
 The guard is per-request and needs no configuration. It arms in two modes:
 
-1. **Prompt-side** — if the request's last prompt token is `<|im_start|>`, stop strings stay
-   dormant until `<|im_end|>` appears in output.
+1. **Prompt-side** — if the request's last prompt token is `<think>`, stop strings stay
+   dormant until `</think>` appears in output.
 2. **Output-side** — when the request carries stop strings and reasoning markers are
    configured but the prompt does **not** end with the tag (some templates never put the tag in
    the prompt and the model opens `<think>` as its first output token), the guard arms on that
@@ -603,7 +603,7 @@ that node silently runs unpatched and you get confusing half-fixed results.
 ### Known side effect: reasoning runaways become more visible, not less
 
 Worth stating so it is not read as a regression. Issue #18 (B) is a reasoning runaway in which
-`<|im_end|>` never arrives. Because this patch keeps stops dormant until the end marker appears,
+`</think>` never arrives. Because this patch keeps stops dormant until the end marker appears,
 a request in that state now keeps stops dormant for its whole life and runs to `max_tokens` —
 where previously a client stop string could cut it short by accident.
 
@@ -623,8 +623,9 @@ in either direction.
 ### Status in this repo
 
 **Optional — not part of the current launcher mount set** (Patch 3 / Patch 4 / Patch 6 plus
-the four vision-port files). Apply it only if you serve thinking mode to harnesses that send
-stop sequences.
+the four vision-port files). Thinking is the **default** on this stack, so any client or harness
+that sends its own `stop` sequences is exposed to the `content: null` failure described above;
+if you run one against these launchers, mount this patch on **every** rank.
 
 ## Patch 6 (upstream #30) — preserve the local scheduler queue across long model loads
 

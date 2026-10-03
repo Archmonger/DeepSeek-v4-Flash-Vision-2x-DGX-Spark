@@ -37,9 +37,9 @@ A bare "null-content rate" aggregates at least five unrelated causes, and they w
 fixes. Two fields settle which one you have. Do this before opening an issue or quoting a
 rate:
 
-| `finish_reason` | `<|im_end|>` in the raw output | what it is |
+| `finish_reason` | `</think>` in the raw output | what it is |
 | --- | --- | --- |
-| `stop` | no | a **client stop string fired inside reasoning** — the CoT restated it, so generation was decapitated before `<|im_end|>`. lm-eval sends `stop[:4]` on every request. Fix: PR #21's reasoning-aware stop guard, or `until: []` client-side. |
+| `stop` | no | a **client stop string fired inside reasoning** — the CoT restated it, so generation was decapitated before `</think>`. lm-eval sends `stop[:4]` on every request. Fix: PR #21's reasoning-aware stop guard, or `until: []` client-side. |
 | `length` | no | **budget exceeded**, not a hang. Reasoning is heavy-tailed even on trivial prompts (48–440 tokens measured on `"What's 1 + 1?"`). Raise `max_tokens` and re-measure; if the rate moves with the budget it was never a non-termination. |
 | `length` | no, *and* the rate does not move with budget | **genuine non-termination** — a repetition loop. Detector that works: 3 consecutive 4,000-char windows below 2% novel word-8-grams. Block-level uniqueness reads *high* on plainly looping text; do not use it. Tracked in issue #18 (B). Sampling at the checkpoint's specified `temperature 1.0` measured 18/18 terminating vs 14/36 at 0.6. |
 | `stop` | n/a | you sent **`reasoning_effort:"none"` with `thinking:true`** — chat-mode prompt, thinking-armed parser. |
@@ -47,7 +47,7 @@ rate:
 
 A sixth, rarer case: the model occasionally emits a pseudo-tag scaffold
 (`<STORE_AND_RETURN> 570 </STORE_AND_RETURN>`, `<STDERR> final</STDERR>630`) as its *entire*
-output and never closes `<|im_end|>`, so the parser files everything as reasoning. Measured
+output and never closes `</think>`, so the parser files everything as reasoning. Measured
 5/60 → 0/60 with a marker-specific fallback, with ~0.8% residual on a different tag;
 tag-matching is whack-a-mole, so this is documented rather than patched. Non-streaming only in
 the reported measurements. Credit @robotnurse (issue #6).

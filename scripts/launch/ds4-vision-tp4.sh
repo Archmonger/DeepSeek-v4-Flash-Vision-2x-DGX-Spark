@@ -120,7 +120,7 @@ docker run -d --name "$NAME" --restart no \
       --tool-call-parser deepseek_v4 --enable-auto-tool-choice \
       --reasoning-parser deepseek_v4 \
       --reasoning-config '$REASON' \
-      --default-chat-template-kwargs '{\"thinking\":false}' \
+      --default-chat-template-kwargs '{\"thinking\":true}' \
       --generation-config vllm \
       --enable-flashinfer-autotune \
       --nnodes 4 --node-rank $NODE_RANK --master-addr $MASTER_ADDR --master-port $MASTER_PORT $HEADLESS

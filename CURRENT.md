@@ -102,20 +102,25 @@ per-boot figure, reporting conditions with the number — lives in
 
 - **The vision launchers in `scripts/launch/` are the supported path**, and they are what the tables
   above describe.
-- **`sparkrun/` carries a self-contained Vision-Exp recipe** that rebuilds the same runtime
-  in-container ([`sparkrun/README.md`](sparkrun/README.md)). It serves under the id
-  `deepseek-v4-flash-vision-exp`; the launchers serve `deepseek-v4-flash-dspark`. Clients
-  pointed at `:8888` use the launcher's id.
+- **`sparkrun/` is the primary way this repo executes.** `ds4-vision-exp-tp2.yaml` and
+  `ds4-vision-exp-tp4.yaml` are self-contained — each rebuilds the runtime in-container from a
+  pinned source commit ([`sparkrun/README.md`](sparkrun/README.md)) — and serves the same
+  `deepseek-v4-flash-dspark` id on `:8888` as the launchers. Every deliberate difference
+  between a recipe and its launcher is enumerated in
+  [`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md), and
+  `scripts/check/test-prompt-token-details.py` fails the build on undocumented drift.
 - **`.env.dspark` is the fleet env template**
   ([`.env.dspark.example`](.env.dspark.example)) for the scripts that source it —
   `scripts/build/build-dspark-vllm-runtime.sh`, `scripts/serve/prepare-dspark-model-cache.sh`
   and `scripts/serve/smoke-deepseek-v4-flash-dspark.sh`. The launchers take their
   configuration from their own `-e` blocks plus `PROTECTED_FRACTION` / `SWA_RECYCLE` /
   `MODEL_DIR` from the ambient shell, and do **not** source `.env.dspark`.
-- **Serving is k=5 probabilistic DSpark at `--max-model-len 1048576`**, thinking off by
-  default ([`docs/REASONING-MODE.md`](docs/REASONING-MODE.md)).
+- **Serving is k=5 probabilistic DSpark at `--max-model-len 1048576`**, thinking **on** by
+  default (`--default-chat-template-kwargs '{"thinking":true}'`). Reasoning comes back on the
+  `reasoning` field (there is no `reasoning_content` on this runtime) and it consumes
+  `max_tokens` before any content is produced — cap requests at 32K, not 8K.
 - **Vision-Exp is the only supported model.**
 
 <!-- launcher hashes, maintained by scripts/check/check-current.sh --write -->
-sha256 117d38d99bb77a9af4e0ced68e5e736ff720ea72845d451614ed449bb3b22f56  scripts/launch/ds4-vision-tp2.sh
-sha256 4f6d5183cb88a883bfbc0bd9f910c834344c1c81f19b29288b3108f81aa1571c  scripts/launch/ds4-vision-tp4.sh
+sha256 ee15082c434154c844096bd5aeb0ade37fe5f424f97eb6c214db76580e09f128  scripts/launch/ds4-vision-tp2.sh
+sha256 56d4664aceab18d1ed701863a9f8c5f671aa5ed6845f880bebf69ca4e3b51fdd  scripts/launch/ds4-vision-tp4.sh

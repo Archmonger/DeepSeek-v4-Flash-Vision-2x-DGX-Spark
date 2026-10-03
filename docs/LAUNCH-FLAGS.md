@@ -40,8 +40,8 @@ NCCL/RoCE, JIT-cache split) → [`.env.dspark.example`](../.env.dspark.example) 
   --distributed-executor-backend mp \
   --tool-call-parser deepseek_v4 --enable-auto-tool-choice \
   --reasoning-parser deepseek_v4 \
-  --reasoning-config '{"reasoning_parser":"deepseek_v4","reasoning_start_str":"<|im_start|>","reasoning_end_str":"<|im_end|>"}' \
-  --default-chat-template-kwargs '{"thinking":false}' \
+  --reasoning-config '{"reasoning_parser":"deepseek_v4","reasoning_start_str":"<think>","reasoning_end_str":"</think>"}' \
+  --default-chat-template-kwargs '{"thinking":true}' \
   --generation-config vllm \
   --enable-flashinfer-autotune \
   --nnodes 2 --node-rank <0|1> \
@@ -84,11 +84,17 @@ NCCL/RoCE, JIT-cache split) → [`.env.dspark.example`](../.env.dspark.example) 
   `k=5` is the validated value for this draft block size; why not `k=3`, and why `k>5` crashes at
   first generation → [`PATCHES.md`](PATCHES.md) (Patch 4, Configuration).
 - **`--tokenizer-mode deepseek_v4`** — required for DSpark, and it is what makes
-  `chat_template.jinja` (even an explicit `--chat-template`) inert
-  ([`REASONING-MODE.md`](REASONING-MODE.md)).
+  `chat_template.jinja` inert: prompt formatting comes from the checkpoint's built-in encoder,
+  so even an explicit `--chat-template <file>` is accepted, shows up in the engine's
+  non-default args, and changes nothing.
 - **`--reasoning-parser` / `--reasoning-config` / `--default-chat-template-kwargs`** — thinking
-  is off by default for throughput; markers and per-request overrides →
-  [`REASONING-MODE.md`](REASONING-MODE.md).
+  is **on** by default here (`'{"thinking":true}'`). Reasoning is returned on
+  `message.reasoning` (non-streaming) / `delta.reasoning` (streaming); there is **no**
+  `reasoning_content` key on this runtime, so clients reading that name see nothing and
+  conclude extraction is broken. `<think>` is written into the prompt tail and never
+  generated, so a missing opening tag in the completion is correct. Turn it off per request with
+  `chat_template_kwargs: {"thinking": false}`. Because reasoning is the default, give requests
+  real output budget: a small cap yields `finish_reason: length` with empty `content`.
 - **`--generation-config vllm` and nothing else** — no server-side sampling override. A
   `repetition_penalty` on the DSpark path is a crash risk (illegal memory access) and is not a
   garble fix ([`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)).

@@ -72,7 +72,7 @@ one place: **[`docs/PATCHES.md`](docs/PATCHES.md)**.
 | **Concurrency** | `--max-num-seqs 12` (TP2) · `64` (TP4) |
 | **Speculative decoding** | DSpark, `num_speculative_tokens: 5`, `draft_sample_method: probabilistic` |
 | **Serving** | port `8888` · `--enable-prefix-caching` · `--enable-prompt-tokens-details` · `--async-scheduling` · `--enable-chunked-prefill` |
-| **Reasoning** | off by default (`--default-chat-template-kwargs '{"thinking":false}'`) — see [reasoning mode](docs/REASONING-MODE.md) |
+| **Reasoning** | **on** by default (`--default-chat-template-kwargs '{"thinking":true}'`) · read it from `message.reasoning`, not `reasoning_content` |
 
 KV pool size is a **per-boot** figure that swings with unified-memory usage; read it off
 the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS.md)).
@@ -84,7 +84,6 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | know exactly what runs today, pinned | [`CURRENT.md`](CURRENT.md) |
 | understand the TP2 command flag by flag | [`docs/LAUNCH-FLAGS.md`](docs/LAUNCH-FLAGS.md) |
 | understand the patches | [`docs/PATCHES.md`](docs/PATCHES.md) |
-| work with thinking / `reasoning_effort` | [`docs/REASONING-MODE.md`](docs/REASONING-MODE.md) |
 | read cache hits per request | [`docs/CACHE-REPORTING.md`](docs/CACHE-REPORTING.md) |
 | debug a broken or slow deployment | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
 | benchmark without fooling myself | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) |
@@ -109,7 +108,7 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | `recipe/` | runtime overlay sources, the overlay Dockerfile, and the NVFP4 stage A/B/C Dockerfiles |
 | `patches/` | patch files and patchers applied to the runtime |
 | `vision-exp/` | the vision port payload — `port/*.py` (patchers + `ds4v_*` sources), consumed by `scripts/build/build-ds4v-files.sh` |
-| `docs/` | reference docs — patches, launch flags, reasoning mode, cache reporting, troubleshooting, benchmarking, portability, the upgrade path |
+| `docs/` | reference docs — patches, launch flags, cache reporting, troubleshooting, benchmarking, portability, sparkrun parity, the upgrade path |
 | `sparkrun/` | self-contained sparkrun recipes |
 
 ## Contributing
