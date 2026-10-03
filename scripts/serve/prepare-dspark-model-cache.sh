@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env.dspark}"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env.dspark}"
 
 if [ -f "$ENV_FILE" ]; then
   set -a
@@ -70,10 +70,10 @@ verify_cache
 
 if [ "${PREPARE_WORKER:-1}" = "1" ]; then
   : "${WORKER_HOST:?WORKER_HOST must be set in $ENV_FILE or environment}"
-  WORKER_DIR="${WORKER_SCRIPT_DIR:-${WORKER_DIR:-$SCRIPT_DIR}}"
+  WORKER_DIR="${WORKER_SCRIPT_DIR:-${WORKER_DIR:-$REPO_ROOT}}"
   WORKER_HF_CACHE="${WORKER_HF_CACHE:-$HF_CACHE}"
   ssh "$WORKER_HOST" "mkdir -p '$WORKER_DIR'"
-  scp "$SCRIPT_DIR/prepare-dspark-model-cache.sh" "${WORKER_HOST}:${WORKER_DIR}/prepare-dspark-model-cache.sh"
+  scp "$REPO_ROOT/scripts/serve/prepare-dspark-model-cache.sh" "${WORKER_HOST}:${WORKER_DIR}/prepare-dspark-model-cache.sh"
   scp "$ENV_FILE" "${WORKER_HOST}:${WORKER_DIR}/.env.dspark"
   ssh "$WORKER_HOST" "cd '$WORKER_DIR' && env -u MASTER_ADDR -u MASTER_PORT -u NODE_RANK -u HEADLESS ENV_FILE='.env.dspark' THIS_NODE_HF_CACHE='$WORKER_HF_CACHE' PREPARE_WORKER=0 ./prepare-dspark-model-cache.sh"
 fi

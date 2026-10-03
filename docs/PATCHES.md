@@ -21,13 +21,13 @@ different roots (see [Staging and verification](#staging-and-verification)).
 | **1** | Draft acceptance collapses toward 0 at `--max-num-seqs > 1`: persistent DSpark draft KV is keyed by vLLM batch-row position, which continuous batching condenses | `recipe/overlay/vllm/v1/spec_decode/dspark_proposer.py`, `recipe/overlay/vllm/models/deepseek_v4/nvidia/dspark.py`, `recipe/overlay/vllm/v1/worker/gpu_model_runner.py` | — | Baked into the runtime image | Required **in the image**; no bind mount, no preflight | `grep -c _req_id_to_slot "$VLLM_ROOT/v1/spec_decode/dspark_proposer.py"` → ≥ 1 |
 | **2** | HTTP 500 (`got 41 rows for batch_size=2`) on real staggered arrivals: rectangular `[batch, seq, H]` view cannot represent mixed prefill/decode steps | `recipe/overlay/vllm/v1/spec_decode/dspark_proposer.py`, `recipe/overlay/vllm/models/deepseek_v4/nvidia/dspark.py` | — | Baked into the runtime image | Required **in the image**; needs `VLLM_DSPARK_GPU_REJECTED_CONTEXT_MASK=1` | `grep -c _store_main_kv_ragged "$VLLM_ROOT/models/deepseek_v4/nvidia/dspark.py"` → ≥ 1 |
 | **2b** | 500 on prefill-heavy steps with **no** rejection (`got 166 rows for batch_size=3`): ragged detection was gated on rejection | `recipe/overlay/vllm/v1/spec_decode/dspark_proposer.py` | — | Baked into the runtime image | Required **in the image** | `grep -n "ragged = len(set(seg_lengths))" "$VLLM_ROOT/v1/spec_decode/dspark_proposer.py"` → present inside the `_gpu_rejected_context_mask` branch |
-| **3** | Cold-start garble on long resumed conversations (prompt echo, leaked tool/schema text): spec-token placeholders resized on chunked-prefill chunks | `recipe/overlay/vllm/v1/core/sched/scheduler.py` | `/var/tmp/patch3-scheduler.py` | Bind mount **and** baked in the overlay image | **Yes** — launcher exits `4` if the staged file is missing | [`../scripts/check-patch3.sh`](../scripts/check-patch3.sh) (both nodes) |
-| **4** | DSpark draft's always-on shared expert loads **uninitialised** → ~half decode speed with perfect output quality, silently | `recipe/overlay/vllm/v1/spec_decode/dspark.py` (diff: `patches/0004-dspark-shared-expert-gate-up-proj.patch`) | `/var/tmp/spec-dspark.py` | Bind mount (also baked in the overlay image) | **Yes** — launcher exits `4` if the staged file is missing | [`../scripts/check-patch4.sh`](../scripts/check-patch4.sh) (both nodes) |
+| **3** | Cold-start garble on long resumed conversations (prompt echo, leaked tool/schema text): spec-token placeholders resized on chunked-prefill chunks | `recipe/overlay/vllm/v1/core/sched/scheduler.py` | `/var/tmp/patch3-scheduler.py` | Bind mount **and** baked in the overlay image | **Yes** — launcher exits `4` if the staged file is missing | [`../scripts/check/check-patch3.sh`](../scripts/check/check-patch3.sh) (both nodes) |
+| **4** | DSpark draft's always-on shared expert loads **uninitialised** → ~half decode speed with perfect output quality, silently | `recipe/overlay/vllm/v1/spec_decode/dspark.py` (diff: `patches/0004-dspark-shared-expert-gate-up-proj.patch`) | `/var/tmp/spec-dspark.py` | Bind mount (also baked in the overlay image) | **Yes** — launcher exits `4` if the staged file is missing | [`../scripts/check/check-patch4.sh`](../scripts/check/check-patch4.sh) (both nodes) |
 | **5** | Client `stop` strings fire inside the reasoning segment → `content: null` on thinking requests from harnesses that send stops | `patches/0005-suppress-stops-in-reasoning.patch`, port: `patches/0005-port-vllm-0.25-apply.py` | operator-chosen (e.g. `/var/tmp/detokenizer.py`) | Bind mount / patch-at-start only | **No** — not in the current launcher mount set | grep the patched `v1/engine/detokenizer.py` for the guard markers (`PATCH(stop-in-reasoning)`) |
 | **6 (upstream #30)** | `AttributeError: 'ShmRingBuffer' object has no attribute 'shared_memory'` after a multi-minute model load: the scheduler-output queue's SHM name is unlinked before the late reader opens it | `recipe/overlay/vllm/distributed/device_communicators/shm_broadcast.py`, `recipe/overlay/vllm/v1/executor/multiproc_executor.py` | — | Baked into the runtime image | Not bind-mounted; carried by the overlay image | Assert `MessageQueue.preopen_from_handle` exists in the container; overlay build runs the CPU-only lifetime regression |
 | **6 (upstream #54)** | Prefix cache lost on long conversations (235 s re-prefill of ~400K tokens): unbounded prompt-block protection + sliding-window LRU churn | `recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py` (diff: `patches/0006-kv-cache-prompt-protection-cap-and-swa-recycle.patch`) | `/var/tmp/patch6-single_type_kv_cache_manager.py` | Bind mount (not `COPY`ed by the overlay Dockerfile) | **Yes** — launcher exits `4` if the staged file is missing | `grep -c VLLM_SWA_RECYCLE_SKIPPED_BLOCKS "$VLLM_ROOT/v1/core/single_type_kv_cache_manager.py"` → ≥ 1 |
 | **A (optional)** | The proposer shares the target's cudagraph capture sizes: they round to multiples of `1+k`, so a batch-1 draft dispatches on the 6-bucket and the draft MoE processes 20 draft tokens/step for one stream instead of 5 | `patches/A-drafter-sizes/v1/spec_decode/dspark_proposer.py` | operator-chosen (e.g. `/var/tmp/dspark_proposer.py`) | Bind mount + `VLLM_DSPARK_DRAFT_CAPTURE_SIZES` on **both** ranks | **No** — optional, off by default, not in the current launcher mount set | `grep -c VLLM_DSPARK_DRAFT_CAPTURE_SIZES "$VLLM_ROOT/v1/spec_decode/dspark_proposer.py"` → ≥ 1, and the same boot-log line on both ranks |
-| **Vision port** | Native image input: stock `DeepseekV4ForCausalLM` has no vision tower/aligner ("no module or parameter named `aligner`"), and the registry's static arch table says the model "is not a multimodal model" | `vision-exp/port/*` generated per image by [`../vision-exp/build-ds4v-files.sh`](../vision-exp/build-ds4v-files.sh) | `/var/tmp/ds4v_model.py`, `/var/tmp/ds4v_vision.py`, `/var/tmp/ds4v_mm.py`, `/var/tmp/ds4v_registry.py` | Bind mount (derived per image) | **Yes** — TP4 preflights all four; TP2 fails at container start | build-script marker asserts + `grep -c DeepseekV4VForConditionalGeneration "$VLLM_ROOT/model_executor/models/registry.py"` |
+| **Vision port** | Native image input: stock `DeepseekV4ForCausalLM` has no vision tower/aligner ("no module or parameter named `aligner`"), and the registry's static arch table says the model "is not a multimodal model" | `vision-exp/port/*` generated per image by [`../scripts/build/build-ds4v-files.sh`](../scripts/build/build-ds4v-files.sh) | `/var/tmp/ds4v_model.py`, `/var/tmp/ds4v_vision.py`, `/var/tmp/ds4v_mm.py`, `/var/tmp/ds4v_registry.py` | Bind mount (derived per image) | **Yes** — TP4 preflights all four; TP2 fails at container start | build-script marker asserts + `grep -c DeepseekV4VForConditionalGeneration "$VLLM_ROOT/model_executor/models/registry.py"` |
 
 ## The two "Patch 6"es
 
@@ -194,7 +194,7 @@ taken even when the code is present.
 
 For images **other** than this recipe's overlay build, do not copy this repo's proposer over
 them — a `propose()` signature mismatch (`got an unexpected keyword argument 'req_ids'`) is the
-usual result. Use [`../scripts/apply-nonuniform-guard.py`](../scripts/apply-nonuniform-guard.py),
+usual result. Use [`../scripts/patching/apply-nonuniform-guard.py`](../scripts/patching/apply-nonuniform-guard.py),
 which patches the target image's own proposer in place so the guard is always
 signature-correct.
 
@@ -295,11 +295,11 @@ request must keep its cleared spec list).
 
 ### Verification
 
-[`../scripts/check-patch3.sh`](../scripts/check-patch3.sh) is a fail-closed preflight; run it
+[`../scripts/check/check-patch3.sh`](../scripts/check/check-patch3.sh) is a fail-closed preflight; run it
 against **every** node's container:
 
 ```bash
-./scripts/check-patch3.sh <head-container> <worker-container>
+./scripts/check/check-patch3.sh <head-container> <worker-container>
 # exit 0 = present everywhere, exit 1 = missing somewhere, exit 2 = usage error
 ```
 
@@ -450,7 +450,7 @@ in [`BENCHMARKS.md`](BENCHMARKS.md).
 
 ```bash
 # Fail-closed preflight — run against BOTH nodes
-./scripts/check-patch4.sh <head-container> <worker-container>
+./scripts/check/check-patch4.sh <head-container> <worker-container>
 # exit 0 = present everywhere, exit 1 = missing somewhere, exit 2 = usage error
 ```
 
@@ -500,7 +500,7 @@ No switch. Two operational notes, then the `k` ceiling:
 
 - The mount is **carried per container run**, and a run command can carry every other mount
   while dropping this one — the loss is silent, which is why the launcher preflights it and why
-  [`../scripts/check-patch4.sh`](../scripts/check-patch4.sh) is the first troubleshooting step.
+  [`../scripts/check/check-patch4.sh`](../scripts/check/check-patch4.sh) is the first troubleshooting step.
   Verify it landed on **every** node (head *and* worker).
 - Spec-depth measurements made without this mount are invalid: the "k=3 wins on this
   checkpoint" A/B was an unpatched measurement and is retracted (issue #48). With Patch 4
@@ -778,8 +778,8 @@ docker logs <container> 2>&1 | grep "recycling skipped pages in-request"
   There is no `patch6-single_type_kv_cache_manager.diff` here — the file that stages at `/var/tmp`
   **is** `patch6-single_type_kv_cache_manager.py`, which is where that `.diff` name comes from.
 - There is no launcher named `ds4-vision-tp2-spark-recycle.sh`. Both current launchers —
-  [`../launchers/ds4-vision-tp2.sh`](../launchers/ds4-vision-tp2.sh) and
-  [`../launchers/ds4-vision-tp4.sh`](../launchers/ds4-vision-tp4.sh) — carry the two knobs
+  [`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh) and
+  [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh) — carry the two knobs
   (`VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION` default `0.30`, `VLLM_SWA_RECYCLE_SKIPPED_BLOCKS`
   default `1`).
 
@@ -895,7 +895,7 @@ rm -rf "$VLLM_CACHE_ROOT/modelinfos/"
 | Item | Value |
 |---|---|
 | `--hf-overrides` | `{"architectures":["DeepseekV4VForConditionalGeneration"]}` (both launchers) — selects the registry alias |
-| `vision-exp/build-ds4v-files.sh [IMAGE] [DEST]` | `$1` / `DSPARK_VLLM_IMAGE` = target image; `$2` = staging dir (default `/var/tmp`) |
+| `scripts/build/build-ds4v-files.sh [IMAGE] [DEST]` | `$1` / `DSPARK_VLLM_IMAGE` = target image; `$2` = staging dir (default `/var/tmp`) |
 
 ## Delivery mechanisms
 
@@ -906,7 +906,7 @@ There are two routes to the container filesystem, and they carry the same code.
 `recipe/overlay/` holds the overlaid vLLM sources;
 [`../recipe/Dockerfile.dspark-runtime-overlay`](../recipe/Dockerfile.dspark-runtime-overlay)
 `COPY`s them over the site-packages tree, and
-[`../build-dspark-vllm-runtime.sh`](../build-dspark-vllm-runtime.sh) drives the build (overlay
+[`../scripts/build/build-dspark-vllm-runtime.sh`](../scripts/build/build-dspark-vllm-runtime.sh) drives the build (overlay
 stage, then the `nvfp4` stage A → B → C chain, on head and worker). The overlay build runs
 three gates:
 
@@ -944,7 +944,7 @@ file from one build onto another produces errors like
 - `docker-compose.dspark.yml` deliberately does **not** bind-mount a proposer copy ("a copy
   from one vLLM version crashes another");
 - for third-party images, the guard should be applied in place with
-  [`../scripts/apply-nonuniform-guard.py`](../scripts/apply-nonuniform-guard.py) instead of a
+  [`../scripts/patching/apply-nonuniform-guard.py`](../scripts/patching/apply-nonuniform-guard.py) instead of a
   copied file;
 - every bind mount must target the path printed by the check scripts — a mount onto a wrong path
   is silently a no-op for the code that actually loads.
@@ -952,7 +952,7 @@ file from one build onto another produces errors like
 To confirm the Dockerfile's `COPY` list still matches the tree:
 
 ```bash
-./scripts/verify-overlay-sources.sh [Dockerfile] [overlay-dir]
+./scripts/build/verify-overlay-sources.sh [Dockerfile] [overlay-dir]
 # exit 1 + "Missing overlay source referenced by ...: <path>" for any COPY with no source
 ```
 
@@ -962,7 +962,7 @@ Stage on **every** node before launch — the launchers check for the files but 
 
 ```bash
 # 1. Vision-port files (run on every node, against the image you will run)
-./vision-exp/build-ds4v-files.sh              # -> /var/tmp/ds4v_{model,vision,mm,registry}.py
+./scripts/build/build-ds4v-files.sh              # -> /var/tmp/ds4v_{model,vision,mm,registry}.py
 
 # 2. Patched runtime files (run on every node)
 cp recipe/overlay/vllm/v1/core/sched/scheduler.py               /var/tmp/patch3-scheduler.py
@@ -979,21 +979,21 @@ cp recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py  /var/tmp/patch6-
 | `3` | `MODEL MISSING` — `$MODELS_HOST/$MODEL_DIR` not a directory | model preflight |
 | `4` | A required staged file is missing under `/var/tmp` | patch preflight |
 
-- `launchers/ds4-vision-tp2.sh` checks `patch3-scheduler.py`, `spec-dspark.py` and
+- `scripts/launch/ds4-vision-tp2.sh` checks `patch3-scheduler.py`, `spec-dspark.py` and
   `patch6-single_type_kv_cache_manager.py`; the missing-file message names the source path under
   `recipe/overlay/`. The vision files are **not** preflighted here, so a missing one fails at
   container start instead.
-- `launchers/ds4-vision-tp4.sh` checks **all seven** staged files in a loop (`MISSING
+- `scripts/launch/ds4-vision-tp4.sh` checks **all seven** staged files in a loop (`MISSING
   /var/tmp/<f>` → exit `4`).
 
 ### Post-boot checks (both nodes)
 
 ```bash
 # Patch 3 — cold-prefill garble guard (is_prefill_chunk present)
-./scripts/check-patch3.sh <head-container> <worker-container>
+./scripts/check/check-patch3.sh <head-container> <worker-container>
 
 # Patch 4 — shared-expert mapping present (grep -c shared_experts >= 6)
-./scripts/check-patch4.sh <head-container> <worker-container>
+./scripts/check/check-patch4.sh <head-container> <worker-container>
 ```
 
 Both scripts: `exit 0` = present in every container, `exit 1` = missing somewhere,
@@ -1007,7 +1007,7 @@ like a missing patch — on a perfectly good deployment with a Debian layout
 checks ask Python where vLLM lives and fall back to probing known paths. Override explicitly with:
 
 ```bash
-VLLM_ROOT=/usr/local/lib/python3.12/dist-packages/vllm ./scripts/check-patch4.sh <container>
+VLLM_ROOT=/usr/local/lib/python3.12/dist-packages/vllm ./scripts/check/check-patch4.sh <container>
 ```
 
 Use that same resolved root for the manual greps in each patch section.
@@ -1023,7 +1023,7 @@ Use that same resolved root for the manual greps in each patch section.
 | `DSPARK_SLOT_CLAMP` | `1` | both, `=1` | 1 / slot safety | `0` reverts the protective out-of-range `slot_index` clamp to detect-and-log only (A/B kill switch) |
 | `VLLM_DSPARK_GPU_REJECTED_CONTEXT_MASK` | — | both, `=1` | 2 / 2b | Selects the only path made ragged; without `1` the rectangular path runs and Patch 2/2b do not protect mixed batches |
 | `VLLM_ROOT` | autodetected | not set | verification only | Overrides the container-side vLLM package root for `check-patch3.sh` / `check-patch4.sh` |
-| `DSPARK_VLLM_IMAGE` | build-script default; `build-ds4v-files.sh` falls back to `vllm-dspark-runtime:mia-raf-pr1-nvfp4-probe-c-keys-concurrency-p2b` | build script | vision port | Target image for `vision-exp/build-ds4v-files.sh` (overridable as `$1`) |
+| `DSPARK_VLLM_IMAGE` | build-script default; `build-ds4v-files.sh` falls back to `vllm-dspark-runtime:mia-raf-pr1-nvfp4-probe-c-keys-concurrency-p2b` | build script | vision port | Target image for `scripts/build/build-ds4v-files.sh` (overridable as `$1`) |
 
 `VLLM_SWA_RECYCLE_SKIPPED_BLOCKS` is read once at module import, so changing it takes effect
 on the next container start. `VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION` is read at call time, but

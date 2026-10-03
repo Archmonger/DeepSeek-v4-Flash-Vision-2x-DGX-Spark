@@ -81,11 +81,11 @@ as the thing that matters.
 
 | script | what it measures |
 | --- | --- |
-| [`benchmarks/bench_full.py`](../benchmarks/bench_full.py) | decode by content type, concurrency sweep, prefill depth |
-| [`benchmarks/soak.py`](../benchmarks/soak.py) | long runs of realistic mixed agent traffic (throughput + stability) |
-| [`benchmarks/realwork_peak.py`](../benchmarks/realwork_peak.py) | which real output shapes approach the ceiling |
-| [`benchmarks/garble_tap.py`](../benchmarks/garble_tap.py) | concurrent-output corruption tap |
-| [`scripts/agent_sanity_bench.py`](../scripts/agent_sanity_bench.py) | 1/2/4/6-concurrency sanity + garble check before pointing a harness at the endpoint |
+| [`scripts/bench/bench_full.py`](../scripts/bench/bench_full.py) | decode by content type, concurrency sweep, prefill depth |
+| [`scripts/bench/soak.py`](../scripts/bench/soak.py) | long runs of realistic mixed agent traffic (throughput + stability) |
+| [`scripts/bench/realwork_peak.py`](../scripts/bench/realwork_peak.py) | which real output shapes approach the ceiling |
+| [`scripts/bench/garble_tap.py`](../scripts/bench/garble_tap.py) | concurrent-output corruption tap |
+| [`scripts/bench/agent_sanity_bench.py`](../scripts/bench/agent_sanity_bench.py) | 1/2/4/6-concurrency sanity + garble check before pointing a harness at the endpoint |
 
 If the direct bench is clean but an agent harness reports garbage, investigate the
 harness, its fallback list, and prompt replay before blaming the model — see

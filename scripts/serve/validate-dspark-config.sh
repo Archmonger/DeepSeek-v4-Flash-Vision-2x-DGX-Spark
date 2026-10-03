@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env.dspark}"
-COMPOSE_FILE="${COMPOSE_FILE:-$SCRIPT_DIR/docker-compose.dspark.yml}"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env.dspark}"
+COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker-compose.dspark.yml}"
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "Missing $ENV_FILE. Copy .env.dspark.example to .env.dspark and edit it." >&2

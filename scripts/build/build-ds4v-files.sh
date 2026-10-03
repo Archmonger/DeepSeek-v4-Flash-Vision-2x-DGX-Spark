@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-ds4v-files.sh [IMAGE] [DEST]
 #
-# Produces the four files that launchers/ds4-vision-tp2.sh (and launchers/ds4-vision-tp4.sh)
+# Produces the four files that scripts/launch/ds4-vision-tp2.sh (and scripts/launch/ds4-vision-tp4.sh)
 # bind-mount. Run it on EVERY node.
 #
 # Two of the four are shipped in this repo and are copied verbatim:
@@ -23,7 +23,8 @@ set -euo pipefail
 IMAGE="${1:-${DSPARK_VLLM_IMAGE:-vllm-dspark-runtime:mia-raf-pr1-nvfp4-probe-c-keys-concurrency-p2b}}"
 DEST="${2:-/var/tmp}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-PORT="$HERE/port"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
+PORT="$REPO_ROOT/vision-exp/port"
 
 for f in patch_vision.py patch_registry.py ds4v_vision.py ds4v_mm.py; do
   test -f "$PORT/$f" || { echo "MISSING $PORT/$f -- run this from a clone of the repo" >&2; exit 2; }

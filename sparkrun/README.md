@@ -42,7 +42,7 @@ Decode is acceptance-bound and content-driven: the spread above is one server on
 ## Speed test
 
 ```bash
-./speedtest-starfall.sh http://<head-ip>:8888
+../scripts/bench/speedtest-starfall.sh http://<head-ip>:8888
 ```
 
 Warms the engine (first requests after boot or ~30 min idle run ~30% slow), then measures the Starfall prompt the right way: `stream: false` + `usage.completion_tokens`. Don't count SSE chunks — under spec decode vLLM emits one chunk per decode *step*, so stream-delta counting reports steps/s and under-reads by the acceptance length.

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env.dspark}"
-COMPOSE_FILE="${COMPOSE_FILE:-$SCRIPT_DIR/docker-compose.dspark.yml}"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env.dspark}"
+COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker-compose.dspark.yml}"
 
 if [ -f "$ENV_FILE" ]; then
   set -a
@@ -14,9 +14,9 @@ fi
 
 : "${WORKER_HOST:?WORKER_HOST must be set in $ENV_FILE or environment}"
 
-cd "$SCRIPT_DIR"
+cd "$REPO_ROOT"
 
-WORKER_DIR="${WORKER_SCRIPT_DIR:-${WORKER_DIR:-$SCRIPT_DIR}}"
+WORKER_DIR="${WORKER_SCRIPT_DIR:-${WORKER_DIR:-$REPO_ROOT}}"
 WORKER_HF_CACHE="${WORKER_HF_CACHE:-${HF_CACHE:-}}"
 WORKER_VLLM_HOST_IP="${WORKER_VLLM_HOST_IP:-}"
 

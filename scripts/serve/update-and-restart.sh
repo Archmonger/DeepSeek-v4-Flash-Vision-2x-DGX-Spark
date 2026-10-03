@@ -3,7 +3,7 @@
 # Preserves your local .env.dspark and any local docker-compose overrides.
 # Run from the HEAD node checkout dir.
 set -euo pipefail
-cd "$(cd "$(dirname "$0")" && pwd)"
+cd "$(cd "$(dirname "$0")/../.." && pwd)"
 
 echo "[update] stashing local config so pull is clean..."
 STASHED=0
@@ -24,6 +24,6 @@ if [ "$STASHED" = "1" ]; then
 fi
 
 echo "[update] stop → start..."
-bash stop-deepseek-v4-flash-dspark.sh || true
+bash scripts/serve/stop-deepseek-v4-flash-dspark.sh || true
 sleep 3
-exec bash start-deepseek-v4-flash-dspark.sh
+exec bash scripts/serve/start-deepseek-v4-flash-dspark.sh

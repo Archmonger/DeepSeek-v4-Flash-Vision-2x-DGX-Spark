@@ -12,7 +12,7 @@ name: Publish runtime image to GHCR
 # `[self-hosted, linux, ARM64, dgx-spark]`.
 #
 # The runner also needs the local base image `vllm-dspark-runtime:mia-raf-pr1`
-# already present in its Docker daemon: build-dspark-vllm-runtime.sh starts from
+# already present in its Docker daemon: scripts/build/build-dspark-vllm-runtime.sh starts from
 # it and it is not published anywhere. `verify-base` below fails fast with that
 # message rather than letting the build die 20 minutes in.
 #
@@ -66,7 +66,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: vllm-dspark-runtime
-  # Local build tags produced by build-dspark-vllm-runtime.sh.
+  # Local build tags produced by scripts/build/build-dspark-vllm-runtime.sh.
   DSPARK_BASE_IMAGE: vllm-dspark-runtime:mia-raf-pr1
   DSPARK_VLLM_IMAGE: vllm-dspark-runtime:dspark-nvfp4-stage-c
 
@@ -128,7 +128,7 @@ jobs:
           WORKER_BUILD: '0'
           # Ignore any .env.dspark that happens to sit on the runner.
           ENV_FILE: /dev/null
-        run: ./build-dspark-vllm-runtime.sh
+        run: ./scripts/build/build-dspark-vllm-runtime.sh
 
       - name: Verify the built image before pushing anything
         shell: bash

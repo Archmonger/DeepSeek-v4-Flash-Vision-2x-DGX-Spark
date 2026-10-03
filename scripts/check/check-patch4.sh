@@ -12,7 +12,7 @@
 # Patch 3 + ds4v_*.py mounts but silently dropped the spec-dspark.py mount. Measured cost: count-to-100
 # 50.7 -> 80.1 tok/s once restored.
 #
-# usage:  ./scripts/check-patch4.sh <container-name> [more containers...]
+# usage:  ./scripts/check/check-patch4.sh <container-name> [more containers...]
 # exit 0 = Patch 4 present everywhere, exit 1 = missing somewhere.
 set -uo pipefail
 

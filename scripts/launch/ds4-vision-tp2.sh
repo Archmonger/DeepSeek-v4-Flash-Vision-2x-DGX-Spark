@@ -53,7 +53,7 @@ docker run -d --name "$NAME" --restart no \
   -v /var/tmp/patch6-single_type_kv_cache_manager.py:/opt/env/lib/python3.12/site-packages/vllm/v1/core/single_type_kv_cache_manager.py:ro \
   -e VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION="${PROTECTED_FRACTION:-0.30}" \
   -e VLLM_SWA_RECYCLE_SKIPPED_BLOCKS="${SWA_RECYCLE:-1}" \
-  `# Patch 4: DSpark draft shared-expert loader fix. Without it the always-on shared expert loads uninitialised and the draft runs at ~half speed, silently (docs/PATCHES.md). Verify: scripts/check-patch4.sh` \
+  `# Patch 4: DSpark draft shared-expert loader fix. Without it the always-on shared expert loads uninitialised and the draft runs at ~half speed, silently (docs/PATCHES.md). Verify: scripts/check/check-patch4.sh` \
   -v /var/tmp/spec-dspark.py:/opt/env/lib/python3.12/site-packages/vllm/v1/spec_decode/dspark.py:ro \
   `# Vision-Exp port: DeepseekV4ForCausalLM has no vision tower/aligner, so the` \
   `# stock class rejects the checkpoint with "no module or parameter named aligner".` \

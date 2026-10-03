@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env.dspark}"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env.dspark}"
 CONCURRENCY="${CONCURRENCY:-6}"
 MAX_TOKENS="${MAX_TOKENS:-32}"
 

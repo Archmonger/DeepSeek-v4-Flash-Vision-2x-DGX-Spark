@@ -1,7 +1,7 @@
 # CURRENT — the live recipe
 
 The golden record: what actually runs on this fleet today, pinned. CI checks the launcher
-hashes at the bottom of this file against `launchers/`, so a launcher change without a
+hashes at the bottom of this file against `scripts/launch/`, so a launcher change without a
 `CURRENT.md` change fails the build. Everything else about *why* lives in
 [`docs/`](docs/); this file is the *what*.
 
@@ -16,7 +16,7 @@ tokenizer.
 
 ## TP2 — asusi + bluey
 
-**Launcher:** [`launchers/ds4-vision-tp2.sh <0|1>`](launchers/ds4-vision-tp2.sh)
+**Launcher:** [`scripts/launch/ds4-vision-tp2.sh <0|1>`](scripts/launch/ds4-vision-tp2.sh)
 
 | rank | node | fabric IP | role |
 |---|---|---|---|
@@ -32,7 +32,7 @@ tokens** · `--max-num-seqs 12` at `--gpu-memory-utilization 0.85`.
 
 ## TP4 — all four Sparks
 
-**Launcher:** [`launchers/ds4-vision-tp4.sh <0|1|2|3>`](launchers/ds4-vision-tp4.sh)
+**Launcher:** [`scripts/launch/ds4-vision-tp4.sh <0|1|2|3>`](scripts/launch/ds4-vision-tp4.sh)
 
 | rank | node | fabric IP | role |
 |---|---|---|---|
@@ -44,10 +44,10 @@ tokens** · `--max-num-seqs 12` at `--gpu-memory-utilization 0.85`.
 **Launch order: 3, 2, 1, then 0.**
 
 ```bash
-./launchers/ds4-vision-tp4.sh 3     # spark4
-./launchers/ds4-vision-tp4.sh 2     # reddie
-./launchers/ds4-vision-tp4.sh 1     # bluey
-./launchers/ds4-vision-tp4.sh 0     # asusi (head, serves :8888)
+./scripts/launch/ds4-vision-tp4.sh 3     # spark4
+./scripts/launch/ds4-vision-tp4.sh 2     # reddie
+./scripts/launch/ds4-vision-tp4.sh 1     # bluey
+./scripts/launch/ds4-vision-tp4.sh 0     # asusi (head, serves :8888)
 ```
 
 **Recipe deltas from TP2:** same image, same `k=5` probabilistic DSpark, same
@@ -86,7 +86,7 @@ recipe pins.
   ([`docs/CACHE-REPORTING.md`](docs/CACHE-REPORTING.md)).
 - Workers mount Bluey's weights export at `/mnt/bluey-models`.
 - **Drop the page cache on all nodes before launch.**
-- Before quoting any number, run [`scripts/check-patch4.sh`](scripts/check-patch4.sh) against
+- Before quoting any number, run [`scripts/check/check-patch4.sh`](scripts/check/check-patch4.sh) against
   **both** nodes: a missing Patch 4 mount costs about half your decode speed with perfect output.
 
 ## Reading the numbers above
@@ -99,7 +99,7 @@ per-boot figure, reporting conditions with the number — lives in
 
 ## Repo conventions
 
-- **The vision launchers in `launchers/` are the supported path**, and they are what the tables
+- **The vision launchers in `scripts/launch/` are the supported path**, and they are what the tables
   above describe.
 - **`sparkrun/` carries a self-contained Vision-Exp recipe** that rebuilds the same runtime
   in-container ([`sparkrun/README.md`](sparkrun/README.md)). It serves under the id
@@ -107,11 +107,11 @@ per-boot figure, reporting conditions with the number — lives in
   pointed at `:8888` use the launcher's id.
 - **The Compose files are the generic two-node serve/build configuration**:
   `docker-compose.dspark.yml` plus [`.env.dspark.example`](.env.dspark.example) — the template
-  for the `.env.dspark` that `build-dspark-vllm-runtime.sh` also sources.
+  for the `.env.dspark` that `scripts/build/build-dspark-vllm-runtime.sh` also sources.
 - **Serving is k=5 probabilistic DSpark at `--max-model-len 1048576`**, thinking off by
   default ([`docs/REASONING-MODE.md`](docs/REASONING-MODE.md)).
 - **Vision-Exp is the only supported model.**
 
-<!-- launcher hashes, maintained by tools/check-current.sh --write -->
-sha256 a2deb28b31a0ce105cf21703ab031a3d731122e8ea5dcf69a2bf5302cce6cc38  launchers/ds4-vision-tp2.sh
-sha256 484e1b2eee241989c93c4dda5d3e1e4370a237e631be25b2d0a4946de1abd2b3  launchers/ds4-vision-tp4.sh
+<!-- launcher hashes, maintained by scripts/check/check-current.sh --write -->
+sha256 117d38d99bb77a9af4e0ced68e5e736ff720ea72845d451614ed449bb3b22f56  scripts/launch/ds4-vision-tp2.sh
+sha256 4d94cb121b5689d91b73ed3c37b4308ad88cbe4f9fff34032c25c3480a78bc8e  scripts/launch/ds4-vision-tp4.sh

@@ -11,5 +11,5 @@
 
 **Checklist**
 - [ ] I rebased on current `main` (stale PRs merge old configs over the current recipe)
-- [ ] `CURRENT.md` updated in this PR if a launcher or a serving flag changed, and `bash tools/check-current.sh --write` was run
+- [ ] `CURRENT.md` updated in this PR if a launcher or a serving flag changed, and `bash scripts/check/check-current.sh --write` was run
 - [ ] Speed numbers are from real prompts (prose, code, ...); any counting-prompt number is labeled as the draft-acceptance ceiling; prefill is cold

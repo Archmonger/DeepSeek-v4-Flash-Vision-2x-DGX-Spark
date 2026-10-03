@@ -6,7 +6,7 @@ What upstream merges give this recipe, and what they do not. Live pins: [`../CUR
 
 - DSpark PR `vllm-project/vllm#46995` is merged and is the right lane for the garble/concurrency bug class.
 - Stock official vLLM main / v0.24 does **not** boot this NVFP4 DSpark deployment on 2× DGX Spark (SM120/GB10). Do not replace the current runtime with stock.
-- The recipe stays **k=5 probabilistic DSpark** at `--max-model-len 1048576`, `--max-num-seqs 12` on TP2 and `64` on TP4 ([`../launchers/ds4-vision-tp2.sh`](../launchers/ds4-vision-tp2.sh), [`../launchers/ds4-vision-tp4.sh`](../launchers/ds4-vision-tp4.sh)).
+- The recipe stays **k=5 probabilistic DSpark** at `--max-model-len 1048576`, `--max-num-seqs 12` on TP2 and `64` on TP4 ([`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh), [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh)).
 - Rollback posture: keep the current known-good image parked; build any candidate under a new explicit tag.
 
 ## Stock official-main boot failures
@@ -69,11 +69,11 @@ A compatible image is more than PR `#46995`. It needs:
 ## Validation gate
 
 ```bash
-./validate-dspark-config.sh
-./start-deepseek-v4-flash-dspark.sh
-./smoke-deepseek-v4-flash-dspark.sh
+./scripts/serve/validate-dspark-config.sh
+./scripts/serve/start-deepseek-v4-flash-dspark.sh
+./scripts/serve/smoke-deepseek-v4-flash-dspark.sh
 DSPARK_BASE_URL=http://HEAD_NODE_IP:8888/v1 CONCURRENCY=1,2,4,6 \
-  python3 scripts/agent_sanity_bench.py
+  python3 scripts/bench/agent_sanity_bench.py
 ```
 
 Also check: `/v1/models` reports the intended `max_model_len` · no `mtp_block.main_norm` load failure · no BOS / placeholder-token leakage · no CJK drift or repeated-character loops in long direct prompts · no increase in vLLM preemptions under 2/4/6 concurrency · speed measured against the known-good image before switching, per [`BENCHMARKS.md`](BENCHMARKS.md). Deterministic tests send `temperature: 0` in the request body.

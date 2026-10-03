@@ -4,7 +4,7 @@ import shlex
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class PromptTokenDetailsTests(unittest.TestCase):
@@ -24,8 +24,8 @@ class PromptTokenDetailsTests(unittest.TestCase):
     # launchers reporting no cached_tokens. These cover the other serve paths so the
     # two cannot drift apart again.
     LAUNCHERS = (
-        "launchers/ds4-vision-tp2.sh",
-        "launchers/ds4-vision-tp4.sh",
+        "scripts/launch/ds4-vision-tp2.sh",
+        "scripts/launch/ds4-vision-tp4.sh",
     )
 
     def test_launcher_serve_args(self):

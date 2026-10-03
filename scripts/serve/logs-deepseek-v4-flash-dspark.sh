@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env.dspark}"
-COMPOSE_FILE="${COMPOSE_FILE:-$SCRIPT_DIR/docker-compose.dspark.yml}"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env.dspark}"
+COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker-compose.dspark.yml}"
 PROJECT_NAME="${PROJECT_NAME:-deepseek-v4-flash}"
-LEGACY_PROJECT_NAME="${LEGACY_PROJECT_NAME:-$(basename "$SCRIPT_DIR" | tr '[:upper:]' '[:lower:]')}"
+LEGACY_PROJECT_NAME="${LEGACY_PROJECT_NAME:-$(basename "$REPO_ROOT" | tr '[:upper:]' '[:lower:]')}"
 TAIL="${TAIL:-160}"
 
 if [ -f "$ENV_FILE" ]; then
@@ -17,8 +17,8 @@ fi
 
 : "${WORKER_HOST:?WORKER_HOST must be set in $ENV_FILE or environment}"
 
-cd "$SCRIPT_DIR"
-WORKER_DIR="${WORKER_SCRIPT_DIR:-${WORKER_DIR:-$SCRIPT_DIR}}"
+cd "$REPO_ROOT"
+WORKER_DIR="${WORKER_SCRIPT_DIR:-${WORKER_DIR:-$REPO_ROOT}}"
 
 show_logs() {
   local project="$1"

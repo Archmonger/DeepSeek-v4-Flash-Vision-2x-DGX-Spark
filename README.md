@@ -9,9 +9,7 @@ agent traffic. TP2 (2 nodes) and TP4 (4 nodes).
 > preflight, and the numbers we actually measure. This page is the entry point; the
 > reference material lives in [`docs/`](docs/).
 
-> DeepSeek-V4.1-Flash is a different model with its own recipe:
-> [tonyd2wild/DeepSeek-V4.1-Flash-vLLM-DGX-Spark](https://github.com/tonyd2wild/DeepSeek-V4.1-Flash-vLLM-DGX-Spark).
-> This repo is Vision-Exp only.
+This repo is **Vision-Exp only**.
 
 ## Quick start
 
@@ -20,7 +18,7 @@ does not copy them for you.
 
 ```bash
 # 1. Generate the four vision-port files (run on every node)
-./vision-exp/build-ds4v-files.sh          # -> /var/tmp/ds4v_{model,vision,mm,registry}.py
+./scripts/build/build-ds4v-files.sh      # -> /var/tmp/ds4v_{model,vision,mm,registry}.py
 
 # 2. Stage the patched runtime files (run on every node)
 #    What each file is and why it is required: docs/PATCHES.md
@@ -29,15 +27,15 @@ cp recipe/overlay/vllm/v1/spec_decode/dspark.py                    /var/tmp/spec
 cp recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py     /var/tmp/patch6-single_type_kv_cache_manager.py
 
 # 3. Launch worker-first — TP2: rank 1 (worker), then rank 0 (head)
-./launchers/ds4-vision-tp2.sh 1
-./launchers/ds4-vision-tp2.sh 0
+./scripts/launch/ds4-vision-tp2.sh 1
+./scripts/launch/ds4-vision-tp2.sh 0
 
 # 4. Verify the API and the patches
 curl -fsS http://127.0.0.1:8888/v1/models
-./scripts/check-patch4.sh <head-container> <worker-container>
+./scripts/check/check-patch4.sh <head-container> <worker-container>
 ```
 
-**TP4:** `./launchers/ds4-vision-tp4.sh <rank>`, launched in rank order
+**TP4:** `./scripts/launch/ds4-vision-tp4.sh <rank>`, launched in rank order
 **3 → 2 → 1 → 0**. Cluster addresses, fabric IPs, and the rank map are in
 [`CURRENT.md`](CURRENT.md).
 
@@ -53,7 +51,7 @@ measurement, and see [`docs/PATCHES.md`](docs/PATCHES.md) for the full patch inv
 what each patch does, how each is delivered, and how to verify it landed.
 
 ```bash
-./scripts/check-patch4.sh <head-container> <worker-container>   # run against BOTH nodes
+./scripts/check/check-patch4.sh <head-container> <worker-container>   # run against BOTH nodes
 ```
 
 ## Patches
@@ -90,6 +88,7 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | read cache hits per request | [`docs/CACHE-REPORTING.md`](docs/CACHE-REPORTING.md) |
 | debug a broken or slow deployment | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
 | benchmark without fooling myself | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) |
+| find the script that does X | [`scripts/README.md`](scripts/README.md) |
 | understand the vision port internals | [`vision-exp/README.md`](vision-exp/README.md) |
 | run this on hardware that isn't the author's | [`docs/PORTABILITY.md`](docs/PORTABILITY.md) |
 | one-command deployment via sparkrun | [`sparkrun/README.md`](sparkrun/README.md) |
@@ -100,22 +99,25 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 
 | path | purpose |
 |---|---|
-| `launchers/` | the two runnable launchers: `ds4-vision-tp2.sh <0\|1>`, `ds4-vision-tp4.sh <0\|1\|2\|3>` |
-| `vision-exp/` | the vision port — `port/*.py` and `build-ds4v-files.sh`, which stages the four bind-mounted files per image |
+| `scripts/` | **every runnable script**, grouped by job — see [`scripts/README.md`](scripts/README.md) |
+| `scripts/launch/` | the two runnable launchers: `ds4-vision-tp2.sh <0\|1>`, `ds4-vision-tp4.sh <0\|1\|2\|3>` |
+| `scripts/build/` | image build (`build-dspark-vllm-runtime.sh`), vision-port file generation, overlay source check |
+| `scripts/serve/` | the Compose lane: start / stop / status / logs / smoke, config validation, model-cache prep |
+| `scripts/check/` | the CI guard (`check-current.sh`) and the fail-closed preflights (`check-patch3.sh`, `check-patch4.sh`) |
+| `scripts/bench/` | measurement harnesses (peak, soak, concurrency, garble taps) |
+| `scripts/diagnose/`, `scripts/patching/`, `scripts/experimental/` | output-shape analysis, in-place patchers, alternate-runtime lanes |
 | `recipe/` | runtime overlay sources, the overlay Dockerfile, and the NVFP4 stage A/B/C Dockerfiles |
 | `patches/` | patch files and patchers applied to the runtime |
-| `scripts/` | preflight checks (`check-patch3.sh`, `check-patch4.sh`), sanity benches, guards |
-| `benchmarks/` | measurement harnesses (peak, soak, concurrency, garble taps) |
+| `vision-exp/` | the vision port payload — `port/*.py` (patchers + `ds4v_*` sources), consumed by `scripts/build/build-ds4v-files.sh` |
 | `docs/` | reference docs — patches, launch flags, reasoning mode, cache reporting, troubleshooting, benchmarking, portability, the upgrade path |
 | `sparkrun/` | self-contained sparkrun recipes |
-| `tools/` | repo maintenance; `check-current.sh` keeps `CURRENT.md`'s launcher hashes honest |
 
 ## Contributing
 
 If you change a launcher or any serving flag:
 
 1. Update `CURRENT.md` in the same PR, and say which line of it your change moves.
-2. Run `bash tools/check-current.sh --write` (CI runs `bash tools/check-current.sh`).
+2. Run `bash scripts/check/check-current.sh --write` (CI runs `bash scripts/check/check-current.sh`).
 3. Quote performance from **real prompts**, warm, with the token count attached — see
    [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 

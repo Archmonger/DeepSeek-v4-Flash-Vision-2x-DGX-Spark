@@ -5,7 +5,7 @@ recipe: startup blocked on cache ownership, null-content responses that need
 classifying before they get reported, JIT caches shared over NFS, output corruption
 that gets blamed on the weights, and what the NVFP4 KV path actually is.
 
-**First things first:** run [`../scripts/check-patch4.sh`](../scripts/check-patch4.sh) before
+**First things first:** run [`../scripts/check/check-patch4.sh`](../scripts/check/check-patch4.sh) before
 anything else — a missing Patch 4 (shared-expert) mount on any node produces half speed with no
 error; see [`PATCHES.md`](PATCHES.md) (Patch 4).
 

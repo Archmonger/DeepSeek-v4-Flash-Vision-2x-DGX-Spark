@@ -11,7 +11,7 @@
 # Warm requests never failed in any configuration, which is exactly why a 5-prompt gate
 # passes on a broken deployment.
 #
-# usage:  ./scripts/check-patch3.sh <container-name> [more containers...]
+# usage:  ./scripts/check/check-patch3.sh <container-name> [more containers...]
 # exit 0 = Patch 3 present everywhere, exit 1 = missing somewhere.
 set -uo pipefail
 

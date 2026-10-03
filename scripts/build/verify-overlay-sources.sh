@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DOCKERFILE="${1:-$REPO_DIR/recipe/Dockerfile.dspark-runtime-overlay}"
 CONTEXT_DIR="${2:-$REPO_DIR/recipe/overlay}"
 

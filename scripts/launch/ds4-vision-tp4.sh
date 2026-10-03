@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ds4-vision-tp4.sh <0|1|2|3>
 # DeepSeek-V4-Flash-Vision-Exp, TP4 across all 4 Sparks.
-# Extends launchers/ds4-vision-tp2.sh (PROVEN vision env/mounts/args) from 2 -> 4 nodes.
+# Extends scripts/launch/ds4-vision-tp2.sh (PROVEN vision env/mounts/args) from 2 -> 4 nodes.
 # Changed vs the TP2 launcher: tensor-parallel-size 2->4, nnodes 2->4, 4-node rank map,
 # max-num-seqs 12->64 and max-cudagraph-capture-size 12->64 (the 2026-09-02 validated run),
 # MODEL_DIR override, master-port 25440->25460. Everything else is byte-for-byte TP2.

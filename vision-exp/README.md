@@ -40,9 +40,9 @@ The last row is a **modality-specific MoE routing bias**: `bias` applies to text
 One command per node. The script extracts vLLM's files from the image you point it at, patches them, verifies them, and installs into `/var/tmp`:
 
 ```bash
-./build-ds4v-files.sh                  # or: ./build-ds4v-files.sh <image-tag> <dest>
-../launchers/ds4-vision-tp2.sh 1       # worker (holds the weights, NFS-exports them)
-../launchers/ds4-vision-tp2.sh 0       # head, serves :8888
+../scripts/build/build-ds4v-files.sh      # or: ../scripts/build/build-ds4v-files.sh <image-tag> <dest>
+../scripts/launch/ds4-vision-tp2.sh 1       # worker (holds the weights, NFS-exports them)
+../scripts/launch/ds4-vision-tp2.sh 0       # head, serves :8888
 ```
 
 Two of the four bind-mounted files ship in this repo; the other two are **derived from the image you are actually running**:
@@ -66,8 +66,8 @@ Two of the four bind-mounted files ship in this repo; the other two are **derive
 | `port/ds4v_mm.py` | vLLM multimodal plumbing: processing info, dummy inputs, a custom processor. The checkpoint ships no HF processor, so preprocessing (resize solver, patchify, N-layout block build) comes from `inference/image_processor.py`. |
 | `port/patch_vision.py` | Idempotent patcher for vLLM's vendored `deepseek_v4/nvidia/model.py` — 11 anchored edits. |
 | `port/patch_registry.py` | Registers a multimodal architecture alias. |
-| [`../launchers/ds4-vision-tp2.sh`](../launchers/ds4-vision-tp2.sh) | TP2 launcher (`vision-exp/ds4-vision-tp2.sh` is a symlink kept for older PR/issue links); flags explained in [`../docs/LAUNCH-FLAGS.md`](../docs/LAUNCH-FLAGS.md). |
-| [`../launchers/ds4-vision-tp4.sh`](../launchers/ds4-vision-tp4.sh) | TP4 launcher, all four Sparks, at `max-num-seqs 64` / `max-cudagraph-capture-size 64`. |
+| [`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh) | TP2 launcher (`vision-exp/ds4-vision-tp2.sh` is a symlink kept for older PR/issue links); flags explained in [`../docs/LAUNCH-FLAGS.md`](../docs/LAUNCH-FLAGS.md). |
+| [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh) | TP4 launcher, all four Sparks, at `max-num-seqs 64` / `max-cudagraph-capture-size 64`. |
 
 Every patch is guarded on `vision_n_layers > 0`: with no vision layers in the config each guarded branch resolves to the stock vLLM path, leaving a text-only run through these files untouched. Patch 4 (`spec-dspark.py`) is a **separate, required** mount and not one of the four vision files — without it the draft's always-on shared expert loads uninitialised and decode runs at roughly half speed, silently ([`../docs/PATCHES.md`](../docs/PATCHES.md), Patch 4).
 

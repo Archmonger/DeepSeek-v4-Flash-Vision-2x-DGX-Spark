@@ -14,7 +14,7 @@ always signature-correct. Run it against the file extracted from your image:
     docker create --name t <your-image>
     docker cp t:/opt/env/lib/python3.12/site-packages/vllm/v1/spec_decode/dspark_proposer.py ./myproposer.py
     docker rm t
-    python3 scripts/apply-nonuniform-guard.py ./myproposer.py
+    python3 scripts/patching/apply-nonuniform-guard.py ./myproposer.py
     # then bind-mount ./myproposer.py at the same container path (see README).
 
 Idempotent; verifies the result compiles.

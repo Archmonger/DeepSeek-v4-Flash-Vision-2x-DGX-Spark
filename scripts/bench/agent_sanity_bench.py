@@ -83,7 +83,7 @@ def request_one(i: int) -> dict:
         "empty_output": is_empty(content),
         # This runtime returns reasoning in `reasoning`; `reasoning_content` is
         # deprecated and input-only, so reading it alone reports 0 on every row.
-        # Same form as benchmarks/garble_tap.py.
+        # Same form as scripts/bench/garble_tap.py.
         "reasoning_chars": len(
             message.get("reasoning") or message.get("reasoning_content") or ""
         ),

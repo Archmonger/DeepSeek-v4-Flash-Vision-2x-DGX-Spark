@@ -1,8 +1,8 @@
 # The TP2 launch command, flag by flag
 
 The exact `vllm serve` line this recipe runs, and what each flag is doing. The
-executable source of truth is [`../launchers/ds4-vision-tp2.sh`](../launchers/ds4-vision-tp2.sh)
-(TP2) / [`../launchers/ds4-vision-tp4.sh`](../launchers/ds4-vision-tp4.sh) (TP4);
+executable source of truth is [`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh)
+(TP2) / [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh) (TP4);
 this page is transcribed from it, and **if the two ever disagree, the launcher wins.**
 
 Verified live: TP=2, **asusi** (rank0/head, serves `:8888`) + **bluey** (rank1/worker),

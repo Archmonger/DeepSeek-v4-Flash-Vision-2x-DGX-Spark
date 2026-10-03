@@ -208,7 +208,7 @@ pre_exec:
       echo "[dspark-overlay] done: runtime now equivalent to vllm-dspark-runtime:dspark-nvfp4-stage-c @ $COMMIT"
     fi
   # --- VISION PORT: fetch vision-exp-default @ d39f94a, patch model.py + registry.py ---
-  # Lands exactly where the port's launchers/ds4-vision-tp2.sh mounts them:
+  # Lands exactly where the port's scripts/launch/ds4-vision-tp2.sh mounts them:
   #   patch_vision.py   -> vllm/models/deepseek_v4/nvidia/model.py   (in place, idempotent)
   #   patch_registry.py -> vllm/model_executor/models/registry.py   (in place, idempotent)
   #   ds4v_vision.py    -> vllm/models/deepseek_v4/nvidia/ds4v_vision.py (new)
@@ -291,7 +291,7 @@ pre_exec:
 # error out with "Server port never became ready" while the cluster actually boots fine.
 # Use the standalone ./speedtest-starfall.sh against the running server instead.
 
-# Mirrors launchers/ds4-vision-tp2.sh as closely as sparkrun's templating allows.
+# Mirrors scripts/launch/ds4-vision-tp2.sh as closely as sparkrun's templating allows.
 # sparkrun's vllm-distributed runtime appends --nnodes / --node-rank / --master-addr /
 # --master-port (+ --headless on the worker) automatically; NCCL_IB_HCA /
 # NCCL_SOCKET_IFNAME / GID are injected per host by sparkrun's InfiniBand auto-detection.

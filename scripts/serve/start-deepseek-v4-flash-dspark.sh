@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env.dspark}"
-COMPOSE_FILE="${COMPOSE_FILE:-$SCRIPT_DIR/docker-compose.dspark.yml}"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env.dspark}"
+COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker-compose.dspark.yml}"
 WAIT_ATTEMPTS="${WAIT_ATTEMPTS:-100}"
 WAIT_SECONDS="${WAIT_SECONDS:-15}"
 
@@ -31,7 +31,7 @@ CHAT_URL="${CHAT_URL:-http://127.0.0.1:${VLLM_PORT:-8888}/v1/chat/completions}"
 : "${VLLM_HOST_IP:?VLLM_HOST_IP must be set to the head node fabric IP in $ENV_FILE}"
 : "${WORKER_VLLM_HOST_IP:?WORKER_VLLM_HOST_IP must be set to the worker node fabric IP in $ENV_FILE}"
 
-cd "$SCRIPT_DIR"
+cd "$REPO_ROOT"
 
 # DSpark source patches ship inside the runtime image (recipe/overlay/), not
 # as runtime bind-mounts. Launching an image that predates the current overlay
@@ -39,7 +39,7 @@ cd "$SCRIPT_DIR"
 # Skip with SKIP_OVERLAY_CHECK=1 (e.g. offline, or a deliberate old image).
 if [ "${SKIP_OVERLAY_CHECK:-0}" != "1" ]; then
   IMG="${DSPARK_VLLM_IMAGE:-vllm-dspark-runtime:dspark-nvfp4-stage-c}"
-  OVERLAY_DOCKERFILE="$SCRIPT_DIR/recipe/Dockerfile.dspark-runtime-overlay"
+  OVERLAY_DOCKERFILE="$REPO_ROOT/recipe/Dockerfile.dspark-runtime-overlay"
   STALE=0
   if ! docker image inspect "$IMG" >/dev/null 2>&1; then
     echo "Runtime image $IMG not present; building it."
@@ -48,7 +48,7 @@ if [ "${SKIP_OVERLAY_CHECK:-0}" != "1" ]; then
     IMAGE_SUMS="$(docker run --rm --entrypoint bash "$IMG" -c \
       "sha256sum $(awk '$1 == "COPY" { printf "%s ", $3 }' "$OVERLAY_DOCKERFILE")" 2>/dev/null || true)"
     while read -r src dst; do
-      want="$(sha256sum "$SCRIPT_DIR/recipe/overlay/$src" | awk '{ print $1 }')"
+      want="$(sha256sum "$REPO_ROOT/recipe/overlay/$src" | awk '{ print $1 }')"
       have="$(printf '%s\n' "$IMAGE_SUMS" | awk -v f="$dst" '$2 == f { print $1 }')"
       if [ "$want" != "$have" ]; then
         echo "Runtime image $IMG is stale against recipe/overlay/$src; rebuilding."
@@ -58,11 +58,11 @@ if [ "${SKIP_OVERLAY_CHECK:-0}" != "1" ]; then
     done < <(awk '$1 == "COPY" { print $2, $3 }' "$OVERLAY_DOCKERFILE")
   fi
   if [ "$STALE" = "1" ]; then
-    "$SCRIPT_DIR/build-dspark-vllm-runtime.sh"
+    "$REPO_ROOT/scripts/build/build-dspark-vllm-runtime.sh"
   fi
 fi
 
-WORKER_DIR="${WORKER_SCRIPT_DIR:-${WORKER_DIR:-$SCRIPT_DIR}}"
+WORKER_DIR="${WORKER_SCRIPT_DIR:-${WORKER_DIR:-$REPO_ROOT}}"
 WORKER_HF_CACHE="${WORKER_HF_CACHE:-${HF_CACHE:-}}"
 REMOTE_WORKER_DIR="$(printf '%q' "$WORKER_DIR")"
 REMOTE_COMPOSE="cd $REMOTE_WORKER_DIR && env -u MASTER_ADDR -u MASTER_PORT -u NODE_RANK -u HEADLESS COMPOSE_DISABLE_ENV_FILE=1"
