@@ -2,7 +2,7 @@
 
 The exact `vllm serve` line this recipe runs, and what each flag is doing. This is the **shared**
 argv: the primary path is the sparkrun recipe
-([`sparkrun/ds4-vision-exp-tp2.yaml`](../sparkrun/ds4-vision-exp-tp2.yaml)) and the legacy shell
+([`sparkrun/ds4-vision-exp-tp2_v1.yaml`](../sparkrun/ds4-vision-exp-tp2_v1.yaml)) and the legacy shell
 launcher ([`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh)) produces
 the same flags with the same values — `scripts/check/test-prompt-token-details.py` asserts that in
 CI, so the two disagreeing is a broken build, not a documentation choice. Transcribed in TP2 form;
@@ -63,7 +63,7 @@ throughput figure → [`BENCHMARKS.md`](BENCHMARKS.md).
 - **`--hf-overrides '{"architectures":["DeepseekV4VForConditionalGeneration"]}'`** — selects the
   multimodal registry alias added by `ds4v_registry.py`. Without it vLLM answers
   `is_multimodal_model` from its static arch-name table and rejects images with
-  "is not a multimodal model" ([`../vision-exp/README.md`](../vision-exp/README.md)).
+  "is not a multimodal model" ([`VISION-PORT.md`](VISION-PORT.md)).
 - **`--max-model-len 1048576`** — 1M, the checkpoint's true YaRN ceiling
   (`original_max_position_embeddings 65536 × factor 16`), standard on both topologies.
 - **`--kv-cache-dtype nvfp4_ds_mla` / `--block-size 256`** — the Stage C padded NVFP4 envelope;

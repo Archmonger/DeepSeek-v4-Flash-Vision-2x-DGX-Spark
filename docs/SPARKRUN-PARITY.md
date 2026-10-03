@@ -7,8 +7,8 @@ launcher side rather than compare it, see [`LEGACY-LAUNCHERS.md`](LEGACY-LAUNCHE
 
 | Launcher (reference) | Recipe (primary) |
 |---|---|
-| [`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh) | [`../sparkrun/ds4-vision-exp-tp2.yaml`](../sparkrun/ds4-vision-exp-tp2.yaml) |
-| [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh) | [`../sparkrun/ds4-vision-exp-tp4.yaml`](../sparkrun/ds4-vision-exp-tp4.yaml) |
+| [`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh) | [`../sparkrun/ds4-vision-exp-tp2_v1.yaml`](../sparkrun/ds4-vision-exp-tp2_v1.yaml) |
+| [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh) | [`../sparkrun/ds4-vision-exp-tp4_v1.yaml`](../sparkrun/ds4-vision-exp-tp4_v1.yaml) |
 
 This parity is **machine-checked**, not aspirational: `scripts/check/test-prompt-token-details.py`
 parses both sides and fails CI on drift. What it asserts is listed at the bottom.
@@ -28,9 +28,9 @@ this repo. One script defines the payload for every recipe, so a patch bump is o
 | 1 | `kill(1)` shim (base image ships none; teardown calls it) | created inline | present before serve |
 | 2 | `cp -a recipe/overlay/vllm/. → site-packages/vllm/` — carries Patches 1, 2, 2b, 3, 4, 6 (#30) | `recipe/overlay/vllm/` | grep `is_prefill_chunk` (Patch 3), `shared_experts.gate_up_proj` (Patch 4), `VLLM_SWA_RECYCLE_SKIPPED_BLOCKS` (Patch 6 #54) — each **fatal** if absent |
 | 3 | NVFP4 stage A → B → C patch (makes `nvfp4_ds_mla` a valid `--kv-cache-dtype`) | `recipe/nvfp4/Dockerfile.stage-{a,b,c}` heredocs, sed-extracted and piped to the interpreter | the dtype is accepted at serve time; stage files must hold exactly one `PY` heredoc each |
-| 4 | Vision port: `patch_vision.py` → `models/deepseek_v4/nvidia/model.py` | `vision-exp/port/patch_vision.py` | grep `aligner` in patched `model.py` — **fatal** if absent |
-| 5 | Multimodal registry alias `DeepseekV4VForConditionalGeneration` | `vision-exp/port/patch_registry.py` | grep in `registry.py` **plus** a real `import` assert on `_MULTIMODAL_MODELS` |
-| 6 | `ds4v_vision.py`, `ds4v_mm.py` installed next to `model.py` | `vision-exp/port/` | `py_compile` + the import check pulls both |
+| 4 | Vision port: `patch_vision.py` → `models/deepseek_v4/nvidia/model.py` | `patches/vision-port/patch_vision.py` | grep `aligner` in patched `model.py` — **fatal** if absent |
+| 5 | Multimodal registry alias `DeepseekV4VForConditionalGeneration` | `patches/vision-port/patch_registry.py` | grep in `registry.py` **plus** a real `import` assert on `_MULTIMODAL_MODELS` |
+| 6 | `ds4v_vision.py`, `ds4v_mm.py` installed next to `model.py` | `patches/vision-port/` | `py_compile` + the import check pulls both |
 | 7 | Clear `$VLLM_CACHE_ROOT/modelinfos` | — | without it the alias reuses the stale text-only entry → "is not a multimodal model" |
 | 8 | torch `_functorch` AOTAutogradCache → own subdir | patched in place (anchor asserted once) | `py_compile`; prevents `FileExistsError` on shared JIT caches |
 
@@ -160,13 +160,13 @@ otherwise. Rationale for each knob: [`LAUNCH-FLAGS.md`](LAUNCH-FLAGS.md) and
 
 ```bash
 # 1. Patch set actually landed (pre_exec already fail-fasts on all three)
-sparkrun logs ds4-vision-exp-tp2 | grep -E "stage-runtime|FATAL"
+sparkrun logs ds4-vision-exp-tp2_v1 | grep -E "stage-runtime|FATAL"
 
 # 2. The runtime is the one this repo is measured on
 docker exec <container> /opt/env/bin/python -c "import vllm; print(vllm.__version__)"   # expect 0.21.1rc1.dev339+g1967a5627bc3
 
 # 3. B12X is live — a missing line means the half-speed fallback
-sparkrun logs ds4-vision-exp-tp2 | grep "Using 'B12X' Mxfp4 MoE backend"
+sparkrun logs ds4-vision-exp-tp2_v1 | grep "Using 'B12X' Mxfp4 MoE backend"
 
 # 4. Served id and context
 curl -fsS http://<head>:8888/v1/models   # deepseek-v4-flash-dspark, max_model_len 1048576

@@ -18,8 +18,8 @@ tokenizer.
 
 ## TP2 — asusi + bluey
 
-**Recipe:** [`sparkrun/ds4-vision-exp-tp2.yaml`](sparkrun/ds4-vision-exp-tp2.yaml) →
-`sparkrun run ./sparkrun/ds4-vision-exp-tp2.yaml`
+**Recipe:** [`sparkrun/ds4-vision-exp-tp2_v1.yaml`](sparkrun/ds4-vision-exp-tp2_v1.yaml) →
+`sparkrun run ./sparkrun/ds4-vision-exp-tp2_v1.yaml`
 
 **Legacy launcher:** [`scripts/launch/ds4-vision-tp2.sh <0|1>`](scripts/launch/ds4-vision-tp2.sh)
 — see [`docs/LEGACY-LAUNCHERS.md`](docs/LEGACY-LAUNCHERS.md) for staging, rank-by-rank launch and
@@ -40,8 +40,8 @@ tokens** · `--max-num-seqs 12` at `--gpu-memory-utilization 0.85`.
 
 ## TP4 — all four Sparks
 
-**Recipe:** [`sparkrun/ds4-vision-exp-tp4.yaml`](sparkrun/ds4-vision-exp-tp4.yaml) →
-`sparkrun run ./sparkrun/ds4-vision-exp-tp4.yaml`
+**Recipe:** [`sparkrun/ds4-vision-exp-tp4_v1.yaml`](sparkrun/ds4-vision-exp-tp4_v1.yaml) →
+`sparkrun run ./sparkrun/ds4-vision-exp-tp4_v1.yaml`
 
 **Legacy launcher:** [`scripts/launch/ds4-vision-tp4.sh <0|1|2|3>`](scripts/launch/ds4-vision-tp4.sh)
 — see [`docs/LEGACY-LAUNCHERS.md`](docs/LEGACY-LAUNCHERS.md).
@@ -106,8 +106,8 @@ per-boot figure, reporting conditions with the number — lives in
 
 ## Repo conventions
 
-- **`sparkrun/` is the serving path.** `ds4-vision-exp-tp2.yaml` and
-  `ds4-vision-exp-tp4.yaml` are self-contained — each rebuilds the runtime in-container from a
+- **`sparkrun/` is the serving path.** `ds4-vision-exp-tp2_v1.yaml` and
+  `ds4-vision-exp-tp4_v1.yaml` are self-contained — each rebuilds the runtime in-container from a
   pinned source commit ([`sparkrun/README.md`](sparkrun/README.md)) — and serve the same
   `deepseek-v4-flash-dspark` id on `:8888` as the launchers. Every deliberate difference
   between a recipe and its launcher is enumerated in

@@ -1,1 +1,0 @@
-../scripts/launch/ds4-vision-tp2.sh

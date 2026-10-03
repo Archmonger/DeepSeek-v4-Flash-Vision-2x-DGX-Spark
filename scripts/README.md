@@ -7,7 +7,7 @@ scripts and stay where their consumers expect them:
 |---|---|---|
 | vLLM overlay sources + Dockerfiles | `recipe/` | `scripts/build/` |
 | patch files and patchers | `patches/` | the runtime / `scripts/patching/` |
-| vision-port sources and patchers | `vision-exp/port/` | `scripts/build/build-ds4v-files.sh` |
+| vision-port sources and patchers | `patches/vision-port/` | `scripts/build/build-ds4v-files.sh` |
 | sparkrun recipes | `sparkrun/*.yaml` | sparkrun |
 
 Scripts resolve the repo root from their own location (`REPO_ROOT="$(cd "$(dirname
@@ -33,11 +33,11 @@ launchers, re-running `scripts/check/check-current.sh --write`.
 ```bash
 # bring the vision stack up (primary path)
 uvx sparkrun setup                                    # once per cluster
-sparkrun run ./sparkrun/ds4-vision-exp-tp2.yaml       # or ds4-vision-exp-tp4.yaml
+sparkrun run ./sparkrun/ds4-vision-exp-tp2_v1.yaml       # or ds4-vision-exp-tp4_v1.yaml
 
 # prove the runtime got the patches, on the boot you are quoting
-sparkrun logs ds4-vision-exp-tp2 | grep -E "stage-runtime|FATAL"
-sparkrun logs ds4-vision-exp-tp2 | grep "Using 'B12X' Mxfp4 MoE backend"
+sparkrun logs ds4-vision-exp-tp2_v1 | grep -E "stage-runtime|FATAL"
+sparkrun logs ds4-vision-exp-tp2_v1 | grep "Using 'B12X' Mxfp4 MoE backend"
 
 # before a PR that touches a serving flag, a recipe or a launcher
 bash scripts/check/check-current.sh --write   # records the new launcher hashes in CURRENT.md

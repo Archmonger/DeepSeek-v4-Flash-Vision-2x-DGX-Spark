@@ -5,11 +5,11 @@
 # bind-mount. Run it on EVERY node.
 #
 # Two of the four are shipped in this repo and are copied verbatim:
-#   vision-exp/port/ds4v_vision.py   ported ViT + Aligner
-#   vision-exp/port/ds4v_mm.py       multimodal processing / dummy inputs / processor
+#   patches/vision-port/ds4v_vision.py   ported ViT + Aligner
+#   patches/vision-port/ds4v_mm.py       multimodal processing / dummy inputs / processor
 #
 # The other two are DERIVED from whatever image you are running, by applying the
-# patchers in vision-exp/port/ to files extracted from that image:
+# patchers in patches/vision-port/ to files extracted from that image:
 #   ds4v_model.py     = <image>:.../deepseek_v4/nvidia/model.py + patch_vision.py
 #   ds4v_registry.py  = <image>:.../model_executor/models/registry.py + patch_registry.py
 #
@@ -24,7 +24,7 @@ IMAGE="${1:-${DSPARK_VLLM_IMAGE:-vllm-dspark-runtime:mia-raf-pr1-nvfp4-probe-c-k
 DEST="${2:-/var/tmp}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
-PORT="$REPO_ROOT/vision-exp/port"
+PORT="$REPO_ROOT/patches/vision-port"
 
 for f in patch_vision.py patch_registry.py ds4v_vision.py ds4v_mm.py; do
   test -f "$PORT/$f" || { echo "MISSING $PORT/$f -- run this from a clone of the repo" >&2; exit 2; }

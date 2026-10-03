@@ -5,7 +5,7 @@ lives, where it is staged at runtime, how it reaches the container, whether the 
 and how to prove it landed on **every** node.
 
 Related: [`CURRENT.md`](../CURRENT.md) (live deployment state and pins) ·
-[`../vision-exp/README.md`](../vision-exp/README.md) (vision port internals) ·
+[`VISION-PORT.md`](VISION-PORT.md) (vision port internals) ·
 [`CREDITS.md`](../CREDITS.md) (provenance of the concurrency work behind Patches 1/2) ·
 [`BENCHMARKS.md`](BENCHMARKS.md) (how to read a number) ·
 [`UPGRADE-OFFICIAL-MAIN.md`](UPGRADE-OFFICIAL-MAIN.md) (moving to stock vLLM main)
@@ -27,7 +27,7 @@ different roots (see [Staging and verification](#staging-and-verification)).
 | **6 (upstream #30)** | `AttributeError: 'ShmRingBuffer' object has no attribute 'shared_memory'` after a multi-minute model load: the scheduler-output queue's SHM name is unlinked before the late reader opens it | `recipe/overlay/vllm/distributed/device_communicators/shm_broadcast.py`, `recipe/overlay/vllm/v1/executor/multiproc_executor.py` | — | Baked into the runtime image | Not bind-mounted; carried by the overlay image | Assert `MessageQueue.preopen_from_handle` exists in the container; overlay build runs the CPU-only lifetime regression |
 | **6 (upstream #54)** | Prefix cache lost on long conversations (235 s re-prefill of ~400K tokens): unbounded prompt-block protection + sliding-window LRU churn | `recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py` (diff: `patches/0006-kv-cache-prompt-protection-cap-and-swa-recycle.patch`) | `/var/tmp/patch6-single_type_kv_cache_manager.py` | Bind mount (not `COPY`ed by the overlay Dockerfile) | **Yes** — launcher exits `4` if the staged file is missing | `grep -c VLLM_SWA_RECYCLE_SKIPPED_BLOCKS "$VLLM_ROOT/v1/core/single_type_kv_cache_manager.py"` → ≥ 1 |
 | **A (optional)** | The proposer shares the target's cudagraph capture sizes: they round to multiples of `1+k`, so a batch-1 draft dispatches on the 6-bucket and the draft MoE processes 20 draft tokens/step for one stream instead of 5 | `patches/A-drafter-sizes/v1/spec_decode/dspark_proposer.py` | operator-chosen (e.g. `/var/tmp/dspark_proposer.py`) | Bind mount + `VLLM_DSPARK_DRAFT_CAPTURE_SIZES` on **both** ranks | **No** — optional, off by default, not in the current launcher mount set | `grep -c VLLM_DSPARK_DRAFT_CAPTURE_SIZES "$VLLM_ROOT/v1/spec_decode/dspark_proposer.py"` → ≥ 1, and the same boot-log line on both ranks |
-| **Vision port** | Native image input: stock `DeepseekV4ForCausalLM` has no vision tower/aligner ("no module or parameter named `aligner`"), and the registry's static arch table says the model "is not a multimodal model" | `vision-exp/port/*` generated per image by [`../scripts/build/build-ds4v-files.sh`](../scripts/build/build-ds4v-files.sh) | `/var/tmp/ds4v_model.py`, `/var/tmp/ds4v_vision.py`, `/var/tmp/ds4v_mm.py`, `/var/tmp/ds4v_registry.py` | Bind mount (derived per image) | **Yes** — TP4 preflights all four; TP2 fails at container start | build-script marker asserts + `grep -c DeepseekV4VForConditionalGeneration "$VLLM_ROOT/model_executor/models/registry.py"` |
+| **Vision port** | Native image input: stock `DeepseekV4ForCausalLM` has no vision tower/aligner ("no module or parameter named `aligner`"), and the registry's static arch table says the model "is not a multimodal model" | `patches/vision-port/*` generated per image by [`../scripts/build/build-ds4v-files.sh`](../scripts/build/build-ds4v-files.sh) | `/var/tmp/ds4v_model.py`, `/var/tmp/ds4v_vision.py`, `/var/tmp/ds4v_mm.py`, `/var/tmp/ds4v_registry.py` | Bind mount (derived per image) | **Yes** — TP4 preflights all four; TP2 fails at container start | build-script marker asserts + `grep -c DeepseekV4VForConditionalGeneration "$VLLM_ROOT/model_executor/models/registry.py"` |
 
 > **Reading the "Required by current launchers" column from the sparkrun path.** That column is
 > written against the legacy launcher, which fails closed on a missing staged file *before*
@@ -792,8 +792,8 @@ docker logs <container> 2>&1 | grep "recycling skipped pages in-request"
   **both** paths — the legacy launchers
   ([`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh),
   [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh)) and the sparkrun
-  recipes ([`../sparkrun/ds4-vision-exp-tp2.yaml`](../sparkrun/ds4-vision-exp-tp2.yaml),
-  [`../sparkrun/ds4-vision-exp-tp4.yaml`](../sparkrun/ds4-vision-exp-tp4.yaml)) — with the same
+  recipes ([`../sparkrun/ds4-vision-exp-tp2_v1.yaml`](../sparkrun/ds4-vision-exp-tp2_v1.yaml),
+  [`../sparkrun/ds4-vision-exp-tp4_v1.yaml`](../sparkrun/ds4-vision-exp-tp4_v1.yaml)) — with the same
   defaults (`VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION` default `0.30`,
   `VLLM_SWA_RECYCLE_SKIPPED_BLOCKS` default `1`).
 
@@ -847,7 +847,7 @@ stock shared-size behaviour until an operator opts in.
 ## Vision port — `ds4v_model` / `ds4v_vision` / `ds4v_mm` / `ds4v_registry`
 
 Four bind-mounted files give the checkpoint native image input. Details:
-[`../vision-exp/README.md`](../vision-exp/README.md).
+[`VISION-PORT.md`](VISION-PORT.md).
 
 ### Symptom
 
@@ -868,7 +868,7 @@ gains vision support is still classified as text-only.
 
 | staged file | container target | what it is |
 |---|---|---|
-| `/var/tmp/ds4v_model.py` | `models/deepseek_v4/nvidia/model.py` | the image's own `model.py` + `vision-exp/port/patch_vision.py` (ViT + aligner + mapper + `e_score_correction_bias_vl` gate + `vision.`/`aligner.` loader guard) |
+| `/var/tmp/ds4v_model.py` | `models/deepseek_v4/nvidia/model.py` | the image's own `model.py` + `patches/vision-port/patch_vision.py` (ViT + aligner + mapper + `e_score_correction_bias_vl` gate + `vision.`/`aligner.` loader guard) |
 | `/var/tmp/ds4v_vision.py` | `models/deepseek_v4/nvidia/ds4v_vision.py` | the ported ViT + Aligner (shipped in this repo) |
 | `/var/tmp/ds4v_mm.py` | `models/deepseek_v4/nvidia/ds4v_mm.py` | multimodal processing / dummy inputs / processor (shipped in this repo) |
 | `/var/tmp/ds4v_registry.py` | `model_executor/models/registry.py` | the image's own `registry.py` + `patch_registry.py`, adding the `DeepseekV4VForConditionalGeneration` multimodal alias selected by `--hf-overrides` |

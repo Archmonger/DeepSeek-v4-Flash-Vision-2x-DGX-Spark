@@ -32,8 +32,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # (label, launcher, recipe, expected --max-num-seqs)
 PAIRS = (
-    ("TP2", "scripts/launch/ds4-vision-tp2.sh", "sparkrun/ds4-vision-exp-tp2.yaml", 12),
-    ("TP4", "scripts/launch/ds4-vision-tp4.sh", "sparkrun/ds4-vision-exp-tp4.yaml", 64),
+    ("TP2", "scripts/launch/ds4-vision-tp2.sh", "sparkrun/ds4-vision-exp-tp2_v1.yaml", 12),
+    ("TP4", "scripts/launch/ds4-vision-tp4.sh", "sparkrun/ds4-vision-exp-tp4_v1.yaml", 64),
 )
 
 # Flags sparkrun's vllm-distributed runtime appends; a recipe must not hardcode them.

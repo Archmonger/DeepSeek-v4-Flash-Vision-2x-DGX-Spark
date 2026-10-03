@@ -18,7 +18,7 @@ build and no private registry.
 
 ```bash
 uvx sparkrun setup                          # once per cluster: cluster, SSH mesh, ConnectX-7 detection
-sparkrun run ./sparkrun/ds4-vision-exp-tp2.yaml     # or ds4-vision-exp-tp4.yaml
+sparkrun run ./sparkrun/ds4-vision-exp-tp2_v1.yaml     # or ds4-vision-exp-tp4_v1.yaml
 ```
 
 The recipe pins a public base image by **digest**, fetches this repo at a pinned commit, and
@@ -28,8 +28,8 @@ vision port — verifying each step before the server starts. Budget ~200 GB fre
 
 | Tier | Recipe |
 |---|---|
-| TP2 (2 nodes) | [`sparkrun/ds4-vision-exp-tp2.yaml`](sparkrun/ds4-vision-exp-tp2.yaml) |
-| TP4 (4 nodes) | [`sparkrun/ds4-vision-exp-tp4.yaml`](sparkrun/ds4-vision-exp-tp4.yaml) |
+| TP2 (2 nodes) | [`sparkrun/ds4-vision-exp-tp2_v1.yaml`](sparkrun/ds4-vision-exp-tp2_v1.yaml) |
+| TP4 (4 nodes) | [`sparkrun/ds4-vision-exp-tp4_v1.yaml`](sparkrun/ds4-vision-exp-tp4_v1.yaml) |
 
 The API serves at `http://<head>:8888/v1` under the model id **`deepseek-v4-flash-dspark`**.
 Full walkthrough, overrides and boot verification:
@@ -43,8 +43,8 @@ decode speed while producing perfect output and no error**. The staging step is 
 rather than serve that way, but confirm it on the boot you are quoting:
 
 ```bash
-sparkrun logs ds4-vision-exp-tp2 | grep -E "stage-runtime|FATAL"
-sparkrun logs ds4-vision-exp-tp2 | grep "Using 'B12X' Mxfp4 MoE backend"
+sparkrun logs ds4-vision-exp-tp2_v1 | grep -E "stage-runtime|FATAL"
+sparkrun logs ds4-vision-exp-tp2_v1 | grep "Using 'B12X' Mxfp4 MoE backend"
 ```
 
 A missing B12X line is the half-speed fallback. Full post-boot checklist (every rank): §6 of
@@ -86,7 +86,7 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | debug a broken or slow deployment | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
 | benchmark without fooling myself | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) |
 | find the script that does X | [`scripts/README.md`](scripts/README.md) |
-| understand the vision port internals | [`vision-exp/README.md`](vision-exp/README.md) |
+| understand the vision port internals | [`docs/VISION-PORT.md`](docs/VISION-PORT.md) |
 | run this on hardware that isn't the author's | [`docs/PORTABILITY.md`](docs/PORTABILITY.md) |
 | check a recipe against the launcher it replaces | [`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md) |
 | run the old way, with the shell launchers | [`docs/LEGACY-LAUNCHERS.md`](docs/LEGACY-LAUNCHERS.md) |
@@ -106,7 +106,7 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | `scripts/diagnose/`, `scripts/patching/`, `scripts/experimental/` | output-shape analysis, in-place patchers, alternate-runtime lanes |
 | `recipe/` | runtime overlay sources, the overlay Dockerfile, and the NVFP4 stage A/B/C Dockerfiles |
 | `patches/` | patch files and patchers applied to the runtime |
-| `vision-exp/` | the vision port payload — `port/*.py` (patchers + `ds4v_*` sources), consumed by `scripts/build/build-ds4v-files.sh` |
+| `patches/vision-port/` | the vision port payload — the two `ds4v_*` sources and the two patchers, consumed by `scripts/build/build-ds4v-files.sh` and `scripts/build/stage-dspark-runtime.sh` |
 | `sparkrun/` | **the primary serving path** — self-contained recipes per tier |
 | `docs/` | reference docs — patches, launch flags, cache reporting, troubleshooting, benchmarking, portability, sparkrun parity, the legacy launchers, the upgrade path |
 

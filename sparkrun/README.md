@@ -6,8 +6,8 @@ enforced in CI. If you are not sure which to use, use sparkrun.
 
 | Recipe | Matches | Nodes |
 |---|---|---|
-| [`ds4-vision-exp-tp2.yaml`](ds4-vision-exp-tp2.yaml) | `scripts/launch/ds4-vision-tp2.sh` | 2 (TP2) |
-| [`ds4-vision-exp-tp4.yaml`](ds4-vision-exp-tp4.yaml) | `scripts/launch/ds4-vision-tp4.sh` | 4 (TP4) |
+| [`ds4-vision-exp-tp2_v1.yaml`](ds4-vision-exp-tp2_v1.yaml) | `scripts/launch/ds4-vision-tp2.sh` | 2 (TP2) |
+| [`ds4-vision-exp-tp4_v1.yaml`](ds4-vision-exp-tp4_v1.yaml) | `scripts/launch/ds4-vision-tp4.sh` | 4 (TP4) |
 
 The full parity list — every payload mutation, serve flag, env var and container setting, plus
 each deliberate deviation and why — is [`../docs/SPARKRUN-PARITY.md`](../docs/SPARKRUN-PARITY.md).
@@ -24,7 +24,7 @@ uvx sparkrun setup     # wizard: cluster, SSH mesh, ConnectX-7 detection
 Then:
 
 ```bash
-sparkrun run ./ds4-vision-exp-tp2.yaml        # or ds4-vision-exp-tp4.yaml
+sparkrun run ./ds4-vision-exp-tp2_v1.yaml        # or ds4-vision-exp-tp4_v1.yaml
 ```
 
 No image build and no private registry: the recipe pins a public base by **digest**, fetches
@@ -41,8 +41,8 @@ without killing the job; `sparkrun logs` / `status` / `stop` manage it afterward
 ## Verify the boot
 
 ```bash
-sparkrun logs ds4-vision-exp-tp2 | grep -E "stage-runtime|FATAL"
-sparkrun logs ds4-vision-exp-tp2 | grep "Using 'B12X' Mxfp4 MoE backend"
+sparkrun logs ds4-vision-exp-tp2_v1 | grep -E "stage-runtime|FATAL"
+sparkrun logs ds4-vision-exp-tp2_v1 | grep "Using 'B12X' Mxfp4 MoE backend"
 curl -fsS http://<head-ip>:8888/v1/models   # deepseek-v4-flash-dspark · max_model_len 1048576
 ```
 
@@ -56,10 +56,10 @@ vision port and the multimodal registry alias are live.
 ## Overrides you are likely to want
 
 ```bash
-sparkrun run ./ds4-vision-exp-tp2.yaml --dry-run                    # show the plan, change nothing
-sparkrun run ./ds4-vision-exp-tp2.yaml --image <fleet-image-ref>    # skip in-container staging
-sparkrun run ./ds4-vision-exp-tp2.yaml -o model=/mnt/models/DeepSeek-V4-Flash-Vision-Exp   # pre-placed weights
-sparkrun run ./ds4-vision-exp-tp2.yaml -o env.NCCL_IB_HCA=rocep1s0f0   # pin fabric if detection is wrong
+sparkrun run ./ds4-vision-exp-tp2_v1.yaml --dry-run                    # show the plan, change nothing
+sparkrun run ./ds4-vision-exp-tp2_v1.yaml --image <fleet-image-ref>    # skip in-container staging
+sparkrun run ./ds4-vision-exp-tp2_v1.yaml -o model=/mnt/models/DeepSeek-V4-Flash-Vision-Exp   # pre-placed weights
+sparkrun run ./ds4-vision-exp-tp2_v1.yaml -o env.NCCL_IB_HCA=rocep1s0f0   # pin fabric if detection is wrong
 ```
 
 Do **not** lower `--max-cudagraph-capture-size` below `--max-num-seqs` or off the `1+k`
@@ -69,7 +69,7 @@ Why, in both cases: [`../docs/LAUNCH-FLAGS.md`](../docs/LAUNCH-FLAGS.md).
 ## Benchmark
 
 ```bash
-sparkrun benchmark ./ds4-vision-exp-tp2.yaml --skip-run
+sparkrun benchmark ./ds4-vision-exp-tp2_v1.yaml --skip-run
 ```
 
 Runs depth 0/32K × concurrency 1/2/6 against a running server on the coding corpus (the

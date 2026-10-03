@@ -10,7 +10,7 @@ $ curl :8888/v1/chat/completions -d @image_request.json
    *   **Blue** is on the **right** side."
 ```
 
-Pins, node map and live numbers: [`../CURRENT.md`](../CURRENT.md). The TP2 `vllm serve` command explained flag by flag: [`../docs/LAUNCH-FLAGS.md`](../docs/LAUNCH-FLAGS.md). Every patch, with symptom, root cause, fix and verification: [`../docs/PATCHES.md`](../docs/PATCHES.md).
+Pins, node map and live numbers: [`../CURRENT.md`](../CURRENT.md). The TP2 `vllm serve` command explained flag by flag: [`LAUNCH-FLAGS.md`](LAUNCH-FLAGS.md). Every patch, with symptom, root cause, fix and verification: [`PATCHES.md`](PATCHES.md).
 
 ## Why this needed a port at all
 
@@ -37,32 +37,21 @@ The last row is a **modality-specific MoE routing bias**: `bias` applies to text
 
 ## Run it
 
-Primary path is sparkrun — one command, nothing staged by hand:
-
-```bash
-sparkrun run ../sparkrun/ds4-vision-exp-tp2.yaml
-```
-
-The **legacy** shell path stages the payload on every node first. `build-ds4v-files.sh` extracts
+sparkrun (`../sparkrun/ds4-vision-exp-tp2_v1.yaml`) stages everything this port needs inside the
+container; see [`../sparkrun/README.md`](../sparkrun/README.md). The legacy shell path stages the
+same payload on every node first with
+[`../scripts/build/build-ds4v-files.sh`](../scripts/build/build-ds4v-files.sh), which extracts
 vLLM's files from the image you point it at, patches them, verifies them, and installs them into
-`/var/tmp`; then launch worker-first:
-
-```bash
-../scripts/build/build-ds4v-files.sh    # or: ../scripts/build/build-ds4v-files.sh <image-tag> <dest>
-../scripts/launch/ds4-vision-tp2.sh 1   # worker (holds the weights, NFS-exports them)
-../scripts/launch/ds4-vision-tp2.sh 0   # head, serves :8888
-```
-
-Operating that path — staging, exit codes, the TP4 variant: [`LEGACY-LAUNCHERS.md`](../docs/LEGACY-LAUNCHERS.md).
+`/var/tmp`; see [`LEGACY-LAUNCHERS.md`](LEGACY-LAUNCHERS.md).
 
 Two of the four bind-mounted files ship in this repo; the other two are **derived from the image you are actually running**:
 
 | file | provenance |
 |---|---|
-| `ds4v_vision.py` | shipped — `port/ds4v_vision.py` |
-| `ds4v_mm.py` | shipped — `port/ds4v_mm.py` |
-| `ds4v_model.py` | *generated* — image's `deepseek_v4/nvidia/model.py` + `port/patch_vision.py` |
-| `ds4v_registry.py` | *generated* — image's `model_executor/models/registry.py` + `port/patch_registry.py` |
+| `ds4v_vision.py` | shipped — `../patches/vision-port/ds4v_vision.py` |
+| `ds4v_mm.py` | shipped — `../patches/vision-port/ds4v_mm.py` |
+| `ds4v_model.py` | *generated* — image's `deepseek_v4/nvidia/model.py` + `../patches/vision-port/patch_vision.py` |
+| `ds4v_registry.py` | *generated* — image's `model_executor/models/registry.py` + `../patches/vision-port/patch_registry.py` |
 
 **Why generated rather than checked in:** both are copies of vLLM files, so a checked-in copy pins you to one image build and drifts silently the moment the image moves. Generating them means the port always applies to the image you run, and the patchers fail loudly (anchor count != 1) if the image changed underneath them. The script checks its own output before installing — both files must parse, `ds4v_model.py` must carry the vision import, the `bias_vl` gate and the loader guard, and `ds4v_registry.py` must carry the multimodal alias — so a patcher that silently no-ops fails there instead of surfacing later as `is not a multimodal model`. Stale `$VLLM_CACHE_ROOT/modelinfos/` must still go after any model-interface change (fix 7 below).
 
@@ -72,15 +61,16 @@ Two of the four bind-mounted files ship in this repo; the other two are **derive
 
 | file | what it does |
 |---|---|
-| `port/ds4v_vision.py` | The ViT (32 blocks, 2D RoPE, RMSNorm, gated MLP) + Aligner (pixel-shuffle ÷3 → 2-layer GELU MLP). Verbatim numerics from the checkpoint's `inference/vision.py`. Deliberately **not** TP-sharded — ~410M params, cheaper to replicate than to all-gather. |
-| `port/ds4v_mm.py` | vLLM multimodal plumbing: processing info, dummy inputs, a custom processor. The checkpoint ships no HF processor, so preprocessing (resize solver, patchify, N-layout block build) comes from `inference/image_processor.py`. |
-| `port/patch_vision.py` | Idempotent patcher for vLLM's vendored `deepseek_v4/nvidia/model.py` — 11 anchored edits. |
-| `port/patch_registry.py` | Registers a multimodal architecture alias. |
-| [`../sparkrun/ds4-vision-exp-tp2.yaml`](../sparkrun/ds4-vision-exp-tp2.yaml) | **Primary TP2 recipe.** Same serve argv as the launcher, payload staged in-container — [`SPARKRUN-PARITY.md`](../docs/SPARKRUN-PARITY.md). |
-| [`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh) | **Legacy** TP2 launcher (`vision-exp/ds4-vision-tp2.sh` is a symlink kept for older PR/issue links); flags explained in [`LAUNCH-FLAGS.md`](../docs/LAUNCH-FLAGS.md), how to run it in [`LEGACY-LAUNCHERS.md`](../docs/LEGACY-LAUNCHERS.md). |
-| [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh) | **Legacy** TP4 launcher, all four Sparks, at `max-num-seqs 64` / `max-cudagraph-capture-size 66` (66 = 11×(1+k), the first bucket covering 64). |
+| [`../patches/vision-port/ds4v_vision.py`](../patches/vision-port/ds4v_vision.py) | The ViT (32 blocks, 2D RoPE, RMSNorm, gated MLP) + Aligner (pixel-shuffle ÷3 → 2-layer GELU MLP). Verbatim numerics from the checkpoint's `inference/vision.py`. Deliberately **not** TP-sharded — ~410M params, cheaper to replicate than to all-gather. |
+| [`../patches/vision-port/ds4v_mm.py`](../patches/vision-port/ds4v_mm.py) | vLLM multimodal plumbing: processing info, dummy inputs, a custom processor. The checkpoint ships no HF processor, so preprocessing (resize solver, patchify, N-layout block build) comes from `inference/image_processor.py`. |
+| [`../patches/vision-port/patch_vision.py`](../patches/vision-port/patch_vision.py) | Idempotent patcher for vLLM's vendored `deepseek_v4/nvidia/model.py` — 11 anchored edits. |
+| [`../patches/vision-port/patch_registry.py`](../patches/vision-port/patch_registry.py) | Registers a multimodal architecture alias. |
 
-Every patch is guarded on `vision_n_layers > 0`: with no vision layers in the config each guarded branch resolves to the stock vLLM path, leaving a text-only run through these files untouched. Patch 4 (`spec-dspark.py`) is a **separate, required** mount and not one of the four vision files — without it the draft's always-on shared expert loads uninitialised and decode runs at roughly half speed, silently ([`../docs/PATCHES.md`](../docs/PATCHES.md), Patch 4).
+The two tiers that load them (primary sparkrun recipe, legacy launchers) are in
+[`../sparkrun/README.md`](../sparkrun/README.md) and [`LEGACY-LAUNCHERS.md`](LEGACY-LAUNCHERS.md);
+their equality is enforced by [`SPARKRUN-PARITY.md`](SPARKRUN-PARITY.md).
+
+Every patch is guarded on `vision_n_layers > 0`: with no vision layers in the config each guarded branch resolves to the stock vLLM path, leaving a text-only run through these files untouched. Patch 4 (`spec-dspark.py`) is a **separate, required** mount and not one of the four vision files — without it the draft's always-on shared expert loads uninitialised and decode runs at roughly half speed, silently ([`PATCHES.md`](PATCHES.md), Patch 4).
 
 ## Twelve things that had to be fixed
 
@@ -109,7 +99,7 @@ Each was a real error, in the order it surfaced:
 
 Image-block token counts match the reference math. Spot-checks at temperature 0: red-left / blue-right at 112x112 → *"Red is on the left side. Blue is on the right side."*; green-top / yellow-bottom at 168x168 → *"Green and Yellow. The split is: Horizontal. The color on top is: Green."*
 
-**Speculative depth.** Every supported path passes `k=5` through `--speculative-config`. `MTP_NUM_TOKENS=5` is set by the **TP4 launcher only** and is not the knob to copy into TP2 ([`SPARKRUN-PARITY.md`](../docs/SPARKRUN-PARITY.md) §5 item 7). Any `k=3` comparison run **without** the Patch 4 mount measures the loader rather than the drafter, because an uninitialised shared expert collapses acceptance to the loader's own signature; the k-selection evidence lives in [`PATCHES.md`](../docs/PATCHES.md) (Patch 4 Configuration). Counting prompts are draft-acceptance ceilings rather than throughput, and the KV pool is a per-boot figure — [`BENCHMARKS.md`](../docs/BENCHMARKS.md).
+**Speculative depth.** Every supported path passes `k=5` through `--speculative-config`. `MTP_NUM_TOKENS=5` is set by the **TP4 launcher only** and is not the knob to copy into TP2 ([`SPARKRUN-PARITY.md`](SPARKRUN-PARITY.md) §5 item 7). Any `k=3` comparison run **without** the Patch 4 mount measures the loader rather than the drafter, because an uninitialised shared expert collapses acceptance to the loader's own signature; the k-selection evidence lives in [`PATCHES.md`](PATCHES.md) (Patch 4 Configuration). Counting prompts are draft-acceptance ceilings rather than throughput, and the KV pool is a per-boot figure — [`BENCHMARKS.md`](BENCHMARKS.md).
 
 ### The limiter here is per-step cost, not speculation
 

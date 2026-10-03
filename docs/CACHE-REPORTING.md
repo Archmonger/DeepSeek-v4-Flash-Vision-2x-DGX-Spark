@@ -1,7 +1,7 @@
 # Per-request cache reporting
 
 Every supported serving path passes `--enable-prompt-tokens-details` — both sparkrun recipes
-(`sparkrun/ds4-vision-exp-tp2.yaml`, `sparkrun/ds4-vision-exp-tp4.yaml`) and both legacy launchers
+(`sparkrun/ds4-vision-exp-tp2_v1.yaml`, `sparkrun/ds4-vision-exp-tp4_v1.yaml`) and both legacy launchers
 (`scripts/launch/ds4-vision-tp2.sh`, `scripts/launch/ds4-vision-tp4.sh`) — so
 OpenAI-compatible clients can read `usage.prompt_tokens_details.cached_tokens`
 in Chat Completions responses. For streaming requests, send

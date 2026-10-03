@@ -7,7 +7,7 @@
 # performs the same file mutations with cp + the stage heredocs, so a recipe needs no image
 # build and no private registry.
 #
-# <src-dir> is a checkout of THIS repo containing recipe/ and vision-exp/port/.
+# <src-dir> is a checkout of THIS repo containing recipe/ and patches/vision-port/.
 # <pin>     is the commit <src-dir> came from; it keys the idempotency markers so a re-run
 #           with a new pin re-applies rather than skipping.
 #
@@ -96,9 +96,9 @@ fi
 if [ -e "$VLLM_ROOT/.staged-ds4v-port-$PIN" ]; then
   say "vision port already applied for $PIN, skipping"
 else
-  PORT="$SRC/vision-exp/port"
+  PORT="$SRC/patches/vision-port"
   test -f "$PORT/patch_vision.py" && test -f "$PORT/patch_registry.py" \
-    || { say "FATAL: vision-exp/port missing in $SRC"; exit 1; }
+    || { say "FATAL: patches/vision-port missing in $SRC"; exit 1; }
 
   say "patching DeepseekV4ForCausalLM (ViT + aligner + mapper + gate bias)"
   "$PY" "$PORT/patch_vision.py" "$MODEL_DIR/model.py"
