@@ -19,8 +19,8 @@ launchers, re-running `scripts/check/check-current.sh --write`.
 
 | dir | what is in it |
 |---|---|
-| [`launch/`](launch/) | the supported serving entry points: `ds4-vision-tp2.sh <0\|1>`, `ds4-vision-tp4.sh <0\|1\|2\|3>` |
-| [`build/`](build/) | `build-dspark-vllm-runtime.sh` (overlay + NVFP4 stage A→B→C chain), `build-ds4v-files.sh` (generates the four vision-port bind-mount files per image), `verify-overlay-sources.sh` (every `COPY` in the overlay Dockerfile has a source) |
+| [`launch/`](launch/) | **legacy** shell launchers — `ds4-vision-tp2.sh <0\|1>`, `ds4-vision-tp4.sh <0\|1\|2\|3>`. Kept for the unpublished local fleet image and as the argv baseline the parity check runs against; how to operate them is [`docs/LEGACY-LAUNCHERS.md`](../docs/LEGACY-LAUNCHERS.md). Serving itself is [`sparkrun/`](../sparkrun/README.md) |
+| [`build/`](build/) | `stage-dspark-runtime.sh` (the in-container payload assembly the sparkrun recipes call), `build-dspark-vllm-runtime.sh` (overlay + NVFP4 stage A→B→C chain for the local fleet image), `build-ds4v-files.sh` (generates the four vision-port bind-mount files per image, for the legacy path), `verify-overlay-sources.sh` (every `COPY` in the overlay Dockerfile has a source) |
 | [`serve/`](serve/) | `prepare-dspark-model-cache.sh` (download + shard-verify the checkpoint, sync to the worker), `smoke-deepseek-v4-flash-dspark.sh` (end-to-end Chat Completions smoke) |
 | [`check/`](check/) | `check-current.sh` (CI: `CURRENT.md` launcher hashes), `check-patch3.sh` and `check-patch4.sh` (fail-closed preflight, run against **both** nodes), `test-prompt-token-details.py` (CPU-only argv regression) |
 | [`bench/`](bench/) | measurement harnesses — see [`docs/BENCHMARKS.md`](../docs/BENCHMARKS.md) for how to read their output |
@@ -31,17 +31,25 @@ launchers, re-running `scripts/check/check-current.sh --write`.
 ## The commands you actually run
 
 ```bash
-# bring the vision stack up (worker first, then head)
-./scripts/launch/ds4-vision-tp2.sh 1
-./scripts/launch/ds4-vision-tp2.sh 0
+# bring the vision stack up (primary path)
+uvx sparkrun setup                                    # once per cluster
+sparkrun run ./sparkrun/ds4-vision-exp-tp2.yaml       # or ds4-vision-exp-tp4.yaml
 
-# prove the patches are mounted, on BOTH nodes, before quoting a number
-./scripts/check/check-patch4.sh <head-container> <worker-container>
+# prove the runtime got the patches, on the boot you are quoting
+sparkrun logs ds4-vision-exp-tp2 | grep -E "stage-runtime|FATAL"
+sparkrun logs ds4-vision-exp-tp2 | grep "Using 'B12X' Mxfp4 MoE backend"
 
-# before a PR that touches a launcher or a serving flag
-bash scripts/check/check-current.sh --write   # records the new hashes in CURRENT.md
+# before a PR that touches a serving flag, a recipe or a launcher
+bash scripts/check/check-current.sh --write   # records the new launcher hashes in CURRENT.md
 python3 scripts/check/test-prompt-token-details.py
 ```
+
+The staging and preflight scripts below the `check/` row (`check-patch3.sh`, `check-patch4.sh`)
+and `build/build-ds4v-files.sh` belong to the **legacy launcher** path, where the payload is
+hand-staged on every node before `docker run`. Under sparkrun that assembly is done in-container by
+[`build/stage-dspark-runtime.sh`](build/stage-dspark-runtime.sh). Both paths are described in
+[`docs/SPARKRUN-PARITY.md`](../docs/SPARKRUN-PARITY.md) and
+[`docs/LEGACY-LAUNCHERS.md`](../docs/LEGACY-LAUNCHERS.md).
 
 ## Removed: the two-node Compose lane
 

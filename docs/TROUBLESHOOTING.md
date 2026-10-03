@@ -71,8 +71,10 @@ None of those messages mention the cache. They read like broken kernels or a bro
 the obvious move — but seven JIT/workspace caches default to (or historically sat under) the
 same tree, and then **both ranks JIT into the same directories concurrently**.
 
-**Fix.** Both vision launchers mount a **separate, node-local** volume at
-`/vllm-cache` and point all seven caches at it, independent of where `HF_CACHE` lives:
+**Fix.** Every serving path keeps these caches on a **separate, node-local** volume, independent of
+where `HF_CACHE` lives. The legacy launchers bind `/vllm-cache`; sparkrun uses its per-host
+`/cache/runtime`. Same seven variables, different root — the mapping for both is
+[`SPARKRUN-PARITY.md`](SPARKRUN-PARITY.md) §3. Legacy launcher values:
 
 | variable | value |
 | --- | --- |
@@ -110,7 +112,7 @@ assume the weights are bad. Three checks come first:
    commit rather than trusting a tag name.
 3. **Never apply a server-side `repetition_penalty` on the DSpark spec-decode path.** It is a
    documented spec-decode crash risk (illegal memory access) and it is not a garble fix. The
-   launcher runs with `--generation-config vllm` and **no** `--override-generation-config`, so
+   every serving path runs with `--generation-config vllm` and **no** `--override-generation-config`, so
    default requests do not inherit unstable model-card sampling; explicit client request
    parameters still win. For exact deterministic curl checks, send `temperature: 0` in the
    request body.

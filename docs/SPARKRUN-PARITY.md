@@ -1,8 +1,9 @@
 # sparkrun ↔ launcher parity
 
-sparkrun is how this repo executes. The shell launchers stay as the manual, fleet-local path
-and are the **reference**: every `sparkrun/*.yaml` recipe must match its launcher's runtime,
-serve argv and environment exactly, except where a deviation is listed below with a reason.
+sparkrun is how this repo executes. The shell launchers stay as the manual, fleet-local path and
+are the **reference**: every `sparkrun/*.yaml` recipe must match its launcher's runtime, serve argv
+and environment exactly, except where a deviation is listed below with a reason. To *operate* the
+launcher side rather than compare it, see [`LEGACY-LAUNCHERS.md`](LEGACY-LAUNCHERS.md).
 
 | Launcher (reference) | Recipe (primary) |
 |---|---|

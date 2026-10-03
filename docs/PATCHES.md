@@ -1,8 +1,8 @@
 # Patch Reference — DeepSeek-V4-Flash-Vision-Exp on DGX Spark
 
 One reference for every source patch this recipe carries: what it fixes, where its source
-lives, where it is staged at runtime, how it reaches the container, whether the current
-launchers require it, and how to prove it landed on **every** node.
+lives, where it is staged at runtime, how it reaches the container, whether the recipe requires it,
+and how to prove it landed on **every** node.
 
 Related: [`CURRENT.md`](../CURRENT.md) (live deployment state and pins) ·
 [`../vision-exp/README.md`](../vision-exp/README.md) (vision port internals) ·
@@ -28,6 +28,16 @@ different roots (see [Staging and verification](#staging-and-verification)).
 | **6 (upstream #54)** | Prefix cache lost on long conversations (235 s re-prefill of ~400K tokens): unbounded prompt-block protection + sliding-window LRU churn | `recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py` (diff: `patches/0006-kv-cache-prompt-protection-cap-and-swa-recycle.patch`) | `/var/tmp/patch6-single_type_kv_cache_manager.py` | Bind mount (not `COPY`ed by the overlay Dockerfile) | **Yes** — launcher exits `4` if the staged file is missing | `grep -c VLLM_SWA_RECYCLE_SKIPPED_BLOCKS "$VLLM_ROOT/v1/core/single_type_kv_cache_manager.py"` → ≥ 1 |
 | **A (optional)** | The proposer shares the target's cudagraph capture sizes: they round to multiples of `1+k`, so a batch-1 draft dispatches on the 6-bucket and the draft MoE processes 20 draft tokens/step for one stream instead of 5 | `patches/A-drafter-sizes/v1/spec_decode/dspark_proposer.py` | operator-chosen (e.g. `/var/tmp/dspark_proposer.py`) | Bind mount + `VLLM_DSPARK_DRAFT_CAPTURE_SIZES` on **both** ranks | **No** — optional, off by default, not in the current launcher mount set | `grep -c VLLM_DSPARK_DRAFT_CAPTURE_SIZES "$VLLM_ROOT/v1/spec_decode/dspark_proposer.py"` → ≥ 1, and the same boot-log line on both ranks |
 | **Vision port** | Native image input: stock `DeepseekV4ForCausalLM` has no vision tower/aligner ("no module or parameter named `aligner`"), and the registry's static arch table says the model "is not a multimodal model" | `vision-exp/port/*` generated per image by [`../scripts/build/build-ds4v-files.sh`](../scripts/build/build-ds4v-files.sh) | `/var/tmp/ds4v_model.py`, `/var/tmp/ds4v_vision.py`, `/var/tmp/ds4v_mm.py`, `/var/tmp/ds4v_registry.py` | Bind mount (derived per image) | **Yes** — TP4 preflights all four; TP2 fails at container start | build-script marker asserts + `grep -c DeepseekV4VForConditionalGeneration "$VLLM_ROOT/model_executor/models/registry.py"` |
+
+> **Reading the "Required by current launchers" column from the sparkrun path.** That column is
+> written against the legacy launcher, which fails closed on a missing staged file *before*
+> `docker run`. The sparkrun recipes carry the same set and assert it *inside* the container at
+> boot —
+> [`../scripts/build/stage-dspark-runtime.sh`](../scripts/build/stage-dspark-runtime.sh) aborts
+> rather than start the server on a payload where a patch failed to land. "Required" therefore means
+> required by **both** paths, and "not bind-mounted" means the payload arrives baked or copied
+> instead of mounted. The transports themselves: [Delivery mechanisms](#delivery-mechanisms) and
+> [`SPARKRUN-PARITY.md`](SPARKRUN-PARITY.md) §1.
 
 ## The two "Patch 6"es
 
@@ -778,15 +788,18 @@ docker logs <container> 2>&1 | grep "recycling skipped pages in-request"
   [`patches/0006-kv-cache-prompt-protection-cap-and-swa-recycle.patch`](../patches/0006-kv-cache-prompt-protection-cap-and-swa-recycle.patch).
   There is no `patch6-single_type_kv_cache_manager.diff` here — the file that stages at `/var/tmp`
   **is** `patch6-single_type_kv_cache_manager.py`, which is where that `.diff` name comes from.
-- There is no launcher named `ds4-vision-tp2-spark-recycle.sh`. Both current launchers —
-  [`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh) and
-  [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh) — carry the two knobs
-  (`VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION` default `0.30`, `VLLM_SWA_RECYCLE_SKIPPED_BLOCKS`
-  default `1`).
+- There is no launcher named `ds4-vision-tp2-spark-recycle.sh`. Both tiers carry the two knobs on
+  **both** paths — the legacy launchers
+  ([`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh),
+  [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh)) and the sparkrun
+  recipes ([`../sparkrun/ds4-vision-exp-tp2.yaml`](../sparkrun/ds4-vision-exp-tp2.yaml),
+  [`../sparkrun/ds4-vision-exp-tp4.yaml`](../sparkrun/ds4-vision-exp-tp4.yaml)) — with the same
+  defaults (`VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION` default `0.30`,
+  `VLLM_SWA_RECYCLE_SKIPPED_BLOCKS` default `1`).
 
 ## Patch A (optional) — drafter-private cudagraph capture sizes
 
-**Optional and off by default**, and **not mounted by the current launchers**. With
+**Optional and off by default**, and **not mounted by either serving path**. With
 `VLLM_DSPARK_DRAFT_CAPTURE_SIZES` unset the proposer behaves exactly as stock. Source:
 [`patches/A-drafter-sizes/v1/spec_decode/dspark_proposer.py`](../patches/A-drafter-sizes/v1/spec_decode/dspark_proposer.py)
 — the repo's overlay proposer plus this one feature, so mounting it does not drop Patches 1/2/2b.
@@ -917,9 +930,9 @@ three gates:
 | Import check (module imports **and** a named entry point resolves — e.g. `shm_broadcast.MessageQueue`, `multiproc_executor.WorkerProc`, `DeepSeekV4ToolParser` still subclasses `DeepSeekV32ToolParser`) | files that compile but die at import — the expensive failure mode, because `py_compile` alone yields a green build and a server that dies only after the weights load |
 | CPU-only SHM lifetime regression (Patch 6 / upstream #30) | the queue-lifetime behaviour itself, with no GPU required |
 
-### 2. Read-only bind mounts at `/var/tmp`
+### 2. Read-only bind mounts at `/var/tmp` (legacy launcher path)
 
-The vision launchers overlay three patched files plus the four vision files with `:ro` bind
+The legacy shell launchers overlay three patched files plus the four vision files with `:ro` bind
 mounts because the deployed image predates the baked patches, and because
 `single_type_kv_cache_manager.py` is not `COPY`ed by the overlay Dockerfile at all (it reaches
 the container only as a mount). Same code, different transport:
@@ -933,6 +946,24 @@ the container only as a mount). Same code, different transport:
 /var/tmp/ds4v_mm.py                            -> vllm/models/deepseek_v4/nvidia/ds4v_mm.py
 /var/tmp/ds4v_registry.py                      -> vllm/model_executor/models/registry.py
 ```
+
+### 3. In-container staging (sparkrun path)
+
+The primary path stages nothing on the host. The recipe pins this repo at a source commit, fetches
+it during `pre_exec`, and
+[`../scripts/build/stage-dspark-runtime.sh`](../scripts/build/stage-dspark-runtime.sh) assembles the
+same seven-file payload **inside** the container — overlay copy, NVFP4 stage A/B/C, the vision port,
+the stale `modelinfos` cache clear, and a real import assertion — before `vllm serve` runs. The same
+target paths as §2, the same fail-closed intent, no per-node bookkeeping.
+
+| staged file | §2 transport (legacy) | §3 transport (sparkrun) |
+|---|---|---|
+| the three patched vLLM files + four vision files | pre-copied to host `/var/tmp`, bind-mounted `:ro` | copied from the pinned repo checkout inside the container |
+| who verifies | launcher preflight (`exit 4`) + `check-patch3/4.sh` afterwards | stager greps + import assert, before the server starts |
+| host prerequisite | stage on every node, every boot | none |
+
+Both transports must target the exact paths the check scripts print — a mount or copy onto a wrong
+path is silently a no-op for the code that actually loads.
 
 ### Match the image or crash
 
@@ -971,7 +1002,9 @@ cp recipe/overlay/vllm/v1/spec_decode/dspark.py                 /var/tmp/spec-ds
 cp recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py  /var/tmp/patch6-single_type_kv_cache_manager.py
 ```
 
-### Launcher preflight and exit codes
+### Launcher preflight and exit codes (legacy path)
+
+The legacy launchers fail closed before `docker run`:
 
 | Exit | Meaning | Where |
 |---|---|---|

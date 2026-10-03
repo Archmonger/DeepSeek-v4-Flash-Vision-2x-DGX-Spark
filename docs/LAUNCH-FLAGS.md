@@ -1,21 +1,27 @@
-# The TP2 launch command, flag by flag
+# The serve command, flag by flag
 
-The exact `vllm serve` line this recipe runs, and what each flag is doing. The
-executable source of truth is [`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh)
-(TP2) / [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh) (TP4);
-this page is transcribed from it, and **if the two ever disagree, the launcher wins.**
+The exact `vllm serve` line this recipe runs, and what each flag is doing. This is the **shared**
+argv: the primary path is the sparkrun recipe
+([`sparkrun/ds4-vision-exp-tp2.yaml`](../sparkrun/ds4-vision-exp-tp2.yaml)) and the legacy shell
+launcher ([`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh)) produces
+the same flags with the same values — `scripts/check/test-prompt-token-details.py` asserts that in
+CI, so the two disagreeing is a broken build, not a documentation choice. Transcribed in TP2 form;
+the TP4 deltas are noted at the end.
 
 Verified live: TP=2, **asusi** (rank0/head, serves `:8888`) + **bluey** (rank1/worker),
 clean output. Checkpoint `DeepSeek-V4-Flash-Vision-Exp` pinned at
 `86f746b36186f0e567729a5c06a8c918caba82a9`; image
 `vllm-dspark-runtime:mia-raf-pr1-nvfp4-probe-c-keys-concurrency-p2b`
 (vLLM `0.21.1rc1.dev339+g1967a5627bc3`, B12X MXFP4 MoE). That image predates the baked-in
-Patch 3/Patch 4 overlay, so both arrive here as read-only bind mounts.
+Patch 3/Patch 4 overlay, so on the legacy path both arrive as read-only bind mounts; the sparkrun
+path stages them in-container.
 
 Not on this page: patch delivery and verification → [`PATCHES.md`](PATCHES.md); node/rank map,
 preflight and the live numbers → [`../CURRENT.md`](../CURRENT.md); runtime env (B12X, DSpark,
 NCCL/RoCE, JIT-cache split) → [`.env.dspark.example`](../.env.dspark.example) and the launcher
-`-e` blocks; how to read a throughput figure → [`BENCHMARKS.md`](BENCHMARKS.md).
+`-e` blocks; how the recipe reaches the same env → [`SPARKRUN-PARITY.md`](SPARKRUN-PARITY.md) §3;
+how to run the legacy launcher → [`LEGACY-LAUNCHERS.md`](LEGACY-LAUNCHERS.md); how to read a
+throughput figure → [`BENCHMARKS.md`](BENCHMARKS.md).
 
 ```
 /opt/env/bin/vllm serve <path-to-DeepSeek-V4-Flash-Vision-Exp> \

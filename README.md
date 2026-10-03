@@ -13,46 +13,43 @@ This repo is **Vision-Exp only**.
 
 ## Quick start
 
-Stage the bind-mounted files on **every** node first — the launcher checks for them but
-does not copy them for you.
+Serving is **sparkrun**. One command brings up the golden recipe on a cluster; there is no image
+build and no private registry.
 
 ```bash
-# 1. Generate the four vision-port files (run on every node)
-./scripts/build/build-ds4v-files.sh      # -> /var/tmp/ds4v_{model,vision,mm,registry}.py
-
-# 2. Stage the patched runtime files (run on every node)
-#    What each file is and why it is required: docs/PATCHES.md
-cp recipe/overlay/vllm/v1/core/sched/scheduler.py                  /var/tmp/patch3-scheduler.py
-cp recipe/overlay/vllm/v1/spec_decode/dspark.py                    /var/tmp/spec-dspark.py
-cp recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py     /var/tmp/patch6-single_type_kv_cache_manager.py
-
-# 3. Launch worker-first — TP2: rank 1 (worker), then rank 0 (head)
-./scripts/launch/ds4-vision-tp2.sh 1
-./scripts/launch/ds4-vision-tp2.sh 0
-
-# 4. Verify the API and the patches
-curl -fsS http://127.0.0.1:8888/v1/models
-./scripts/check/check-patch4.sh <head-container> <worker-container>
+uvx sparkrun setup                          # once per cluster: cluster, SSH mesh, ConnectX-7 detection
+sparkrun run ./sparkrun/ds4-vision-exp-tp2.yaml     # or ds4-vision-exp-tp4.yaml
 ```
 
-**TP4:** `./scripts/launch/ds4-vision-tp4.sh <rank>`, launched in rank order
-**3 → 2 → 1 → 0**. Cluster addresses, fabric IPs, and the rank map are in
-[`CURRENT.md`](CURRENT.md).
+The recipe pins a public base image by **digest**, fetches this repo at a pinned commit, and
+rebuilds the runtime inside the container — overlay, NVFP4 stage A/B/C, Patches 3/4/6 and the
+vision port — verifying each step before the server starts. Budget ~200 GB free disk per node and
+~9 min cold / ~5 min warm. `Ctrl+C` detaches without killing the job.
 
-The API serves at `http://<head>:8888/v1` under the model id
-**`deepseek-v4-flash-dspark`**.
+| Tier | Recipe |
+|---|---|
+| TP2 (2 nodes) | [`sparkrun/ds4-vision-exp-tp2.yaml`](sparkrun/ds4-vision-exp-tp2.yaml) |
+| TP4 (4 nodes) | [`sparkrun/ds4-vision-exp-tp4.yaml`](sparkrun/ds4-vision-exp-tp4.yaml) |
+
+The API serves at `http://<head>:8888/v1` under the model id **`deepseek-v4-flash-dspark`**.
+Full walkthrough, overrides and boot verification:
+[`sparkrun/README.md`](sparkrun/README.md) · exact parity against the launchers:
+[`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md).
 
 ### Verify before you trust any number
 
-The launcher fails closed on missing staged files, but one class of failure is silent: a
-missing patch mount can cost roughly **half your decode speed while producing perfect
-output and no error**. Run the fail-closed preflight on **both** nodes before quoting any
-measurement, and see [`docs/PATCHES.md`](docs/PATCHES.md) for the full patch inventory,
-what each patch does, how each is delivered, and how to verify it landed.
+One class of failure is silent: a runtime that came up without Patch 4 costs roughly **half your
+decode speed while producing perfect output and no error**. The staging step is designed to abort
+rather than serve that way, but confirm it on the boot you are quoting:
 
 ```bash
-./scripts/check/check-patch4.sh <head-container> <worker-container>   # run against BOTH nodes
+sparkrun logs ds4-vision-exp-tp2 | grep -E "stage-runtime|FATAL"
+sparkrun logs ds4-vision-exp-tp2 | grep "Using 'B12X' Mxfp4 MoE backend"
 ```
+
+A missing B12X line is the half-speed fallback. Full post-boot checklist (every rank): §6 of
+[`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md). The patch inventory itself is
+[`docs/PATCHES.md`](docs/PATCHES.md).
 
 ## Patches
 
@@ -81,8 +78,9 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 
 | I want to… | Go to |
 |---|---|
+| **run this** | [`sparkrun/README.md`](sparkrun/README.md) |
 | know exactly what runs today, pinned | [`CURRENT.md`](CURRENT.md) |
-| understand the TP2 command flag by flag | [`docs/LAUNCH-FLAGS.md`](docs/LAUNCH-FLAGS.md) |
+| understand the serve command flag by flag | [`docs/LAUNCH-FLAGS.md`](docs/LAUNCH-FLAGS.md) |
 | understand the patches | [`docs/PATCHES.md`](docs/PATCHES.md) |
 | read cache hits per request | [`docs/CACHE-REPORTING.md`](docs/CACHE-REPORTING.md) |
 | debug a broken or slow deployment | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
@@ -90,7 +88,8 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | find the script that does X | [`scripts/README.md`](scripts/README.md) |
 | understand the vision port internals | [`vision-exp/README.md`](vision-exp/README.md) |
 | run this on hardware that isn't the author's | [`docs/PORTABILITY.md`](docs/PORTABILITY.md) |
-| one-command deployment via sparkrun | [`sparkrun/README.md`](sparkrun/README.md) |
+| check a recipe against the launcher it replaces | [`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md) |
+| run the old way, with the shell launchers | [`docs/LEGACY-LAUNCHERS.md`](docs/LEGACY-LAUNCHERS.md) |
 | evaluate a move to stock vLLM official main / v0.24+ | [`docs/UPGRADE-OFFICIAL-MAIN.md`](docs/UPGRADE-OFFICIAL-MAIN.md) |
 | see who did what | [`CREDITS.md`](CREDITS.md) |
 
@@ -99,7 +98,7 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | path | purpose |
 |---|---|
 | `scripts/` | **every runnable script**, grouped by job — see [`scripts/README.md`](scripts/README.md) |
-| `scripts/launch/` | the two runnable launchers: `ds4-vision-tp2.sh <0\|1>`, `ds4-vision-tp4.sh <0\|1\|2\|3>` |
+| `scripts/launch/` | **legacy** shell launchers — `ds4-vision-tp2.sh <0\|1>`, `ds4-vision-tp4.sh <0\|1\|2\|3>`; see [`docs/LEGACY-LAUNCHERS.md`](docs/LEGACY-LAUNCHERS.md) |
 | `scripts/build/` | image build (`build-dspark-vllm-runtime.sh`), vision-port file generation, overlay source check |
 | `scripts/serve/` | model-cache prep (`prepare-dspark-model-cache.sh`) and the end-to-end smoke test (`smoke-deepseek-v4-flash-dspark.sh`) |
 | `scripts/check/` | the CI guard (`check-current.sh`) and the fail-closed preflights (`check-patch3.sh`, `check-patch4.sh`) |
@@ -108,15 +107,18 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | `recipe/` | runtime overlay sources, the overlay Dockerfile, and the NVFP4 stage A/B/C Dockerfiles |
 | `patches/` | patch files and patchers applied to the runtime |
 | `vision-exp/` | the vision port payload — `port/*.py` (patchers + `ds4v_*` sources), consumed by `scripts/build/build-ds4v-files.sh` |
-| `docs/` | reference docs — patches, launch flags, cache reporting, troubleshooting, benchmarking, portability, sparkrun parity, the upgrade path |
-| `sparkrun/` | self-contained sparkrun recipes |
+| `sparkrun/` | **the primary serving path** — self-contained recipes per tier |
+| `docs/` | reference docs — patches, launch flags, cache reporting, troubleshooting, benchmarking, portability, sparkrun parity, the legacy launchers, the upgrade path |
 
 ## Contributing
 
-If you change a launcher or any serving flag:
+If you change a serving flag, a recipe or a launcher:
 
 1. Update `CURRENT.md` in the same PR, and say which line of it your change moves.
 2. Run `bash scripts/check/check-current.sh --write` (CI runs `bash scripts/check/check-current.sh`).
+3. Move the sparkrun recipe and the legacy launcher **together** —
+   `python3 scripts/check/test-prompt-token-details.py` fails if one moves without the other, and
+   [`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md) is the list it enforces.
 3. Quote performance from **real prompts**, warm, with the token count attached — see
    [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 

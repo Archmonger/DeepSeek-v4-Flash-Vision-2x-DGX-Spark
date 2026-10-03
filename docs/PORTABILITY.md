@@ -6,6 +6,12 @@ are the places where a different host trips over an assumption. Numbers below we
 measured on this recipe (`deepseek-ai/DeepSeek-V4-Flash-Vision-Exp`) with the Stage-C
 runtime + the nvfp4 chain, DSpark k=5 probabilistic, 1M context.
 
+> **Which serving path this page applies to.** The gotchas below are host-level and bite either way,
+> but the ones about hardcoded NIC names, `$HOME` cache directories and bind mounts are
+> observations from the **legacy shell launcher**, which hardcodes the author's topology. On the
+> primary sparkrun path those are detected per host and overridden with `-o env.<VAR>=…` —
+> [`SPARKRUN-PARITY.md`](SPARKRUN-PARITY.md) §3 and §5.
+
 ## 1. `nvfp4_ds_mla` lives in the three-stage image, not the overlay
 
 Building only `recipe/Dockerfile.dspark-runtime-overlay` gives an image whose vLLM

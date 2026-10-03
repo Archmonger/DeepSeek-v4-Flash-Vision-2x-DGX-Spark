@@ -6,7 +6,7 @@ What upstream merges give this recipe, and what they do not. Live pins: [`../CUR
 
 - DSpark PR `vllm-project/vllm#46995` is merged and is the right lane for the garble/concurrency bug class.
 - Stock official vLLM main / v0.24 does **not** boot this NVFP4 DSpark deployment on 2× DGX Spark (SM120/GB10). Do not replace the current runtime with stock.
-- The recipe stays **k=5 probabilistic DSpark** at `--max-model-len 1048576`, `--max-num-seqs 12` on TP2 and `64` on TP4 ([`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh), [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh)).
+- The recipe stays **k=5 probabilistic DSpark** at `--max-model-len 1048576`, `--max-num-seqs 12` on TP2 and `64` on TP4 — pinned identically in the primary sparkrun recipes ([`../sparkrun/ds4-vision-exp-tp2.yaml`](../sparkrun/ds4-vision-exp-tp2.yaml), [`../sparkrun/ds4-vision-exp-tp4.yaml`](../sparkrun/ds4-vision-exp-tp4.yaml)) and the legacy launchers ([`../scripts/launch/ds4-vision-tp2.sh`](../scripts/launch/ds4-vision-tp2.sh), [`../scripts/launch/ds4-vision-tp4.sh`](../scripts/launch/ds4-vision-tp4.sh)).
 - Rollback posture: keep the current known-good image parked; build any candidate under a new explicit tag.
 
 ## Stock official-main boot failures
