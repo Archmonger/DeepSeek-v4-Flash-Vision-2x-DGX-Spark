@@ -21,7 +21,7 @@ launchers, re-running `scripts/check/check-current.sh --write`.
 |---|---|
 | [`launch/`](launch/) | the supported serving entry points: `ds4-vision-tp2.sh <0\|1>`, `ds4-vision-tp4.sh <0\|1\|2\|3>` |
 | [`build/`](build/) | `build-dspark-vllm-runtime.sh` (overlay + NVFP4 stage A→B→C chain), `build-ds4v-files.sh` (generates the four vision-port bind-mount files per image), `verify-overlay-sources.sh` (every `COPY` in the overlay Dockerfile has a source) |
-| [`serve/`](serve/) | the Compose lane: `start-`, `stop-`, `status-`, `logs-`, `smoke-deepseek-v4-flash-dspark.sh`, `update-and-restart.sh`, `validate-dspark-config.sh`, `prepare-dspark-model-cache.sh` |
+| [`serve/`](serve/) | `prepare-dspark-model-cache.sh` (download + shard-verify the checkpoint, sync to the worker), `smoke-deepseek-v4-flash-dspark.sh` (end-to-end Chat Completions smoke) |
 | [`check/`](check/) | `check-current.sh` (CI: `CURRENT.md` launcher hashes), `check-patch3.sh` and `check-patch4.sh` (fail-closed preflight, run against **both** nodes), `test-prompt-token-details.py` (CPU-only argv regression) |
 | [`bench/`](bench/) | measurement harnesses — see [`docs/BENCHMARKS.md`](../docs/BENCHMARKS.md) for how to read their output |
 | [`diagnose/`](diagnose/) | `loop_detector.py` (reasoning loop vs heavy tail, from text alone), `capture_runtime.sh` (bundle the head+worker state of a boot for a bug report) |
@@ -42,6 +42,18 @@ launchers, re-running `scripts/check/check-current.sh --write`.
 bash scripts/check/check-current.sh --write   # records the new hashes in CURRENT.md
 python3 scripts/check/test-prompt-token-details.py
 ```
+
+## Removed: the two-node Compose lane
+
+`docker-compose.dspark.yml` and its `start-`/`stop-`/`status-`/`logs-`/`update-and-restart`/
+`validate-dspark-config` drivers were deleted. They were the generic two-node lane from the
+pre-Vision text-model era and could not load the current checkpoint: it served
+`DeepSeek-V4-Flash-Vision-Exp` **without** the vision-port bind mounts or the
+`--hf-overrides DeepseekV4VForConditionalGeneration` alias (so the loader fails on the missing
+`aligner`), **without** the Patch 6 mount (which is bind-mount-only, not baked), and with no
+`--max-cudagraph-capture-size`. Nothing in the repo parses a Compose file now — the
+`vllm serve` argv regression lives against the launchers instead. Recoverable from history if a
+generic Compose lane is ever wanted again.
 
 Everything about what each patch is and how it is delivered:
 [`docs/PATCHES.md`](../docs/PATCHES.md).

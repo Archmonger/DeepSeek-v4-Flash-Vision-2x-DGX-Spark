@@ -69,8 +69,9 @@ A compatible image is more than PR `#46995`. It needs:
 ## Validation gate
 
 ```bash
-./scripts/serve/validate-dspark-config.sh
-./scripts/serve/start-deepseek-v4-flash-dspark.sh
+./scripts/build/verify-overlay-sources.sh
+# launch worker-first on every node, then:
+./scripts/check/check-patch4.sh <head-container> <worker-container>
 ./scripts/serve/smoke-deepseek-v4-flash-dspark.sh
 DSPARK_BASE_URL=http://HEAD_NODE_IP:8888/v1 CONCURRENCY=1,2,4,6 \
   python3 scripts/bench/agent_sanity_bench.py

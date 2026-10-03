@@ -71,8 +71,8 @@ None of those messages mention the cache. They read like broken kernels or a bro
 the obvious move — but seven JIT/workspace caches default to (or historically sat under) the
 same tree, and then **both ranks JIT into the same directories concurrently**.
 
-**Fix.** `docker-compose.dspark.yml` mounts a **separate, node-local** volume at
-`/vllm-cache` and points all seven caches at it, independent of where `HF_CACHE` lives:
+**Fix.** Both vision launchers mount a **separate, node-local** volume at
+`/vllm-cache` and point all seven caches at it, independent of where `HF_CACHE` lives:
 
 | variable | value |
 | --- | --- |

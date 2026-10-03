@@ -1,7 +1,10 @@
 name: CURRENT.md guard
-# Fails a PR that changes a launcher without changing CURRENT.md, or whose CURRENT.md
-# launcher hashes do not match the launchers in the tree. Keeps the golden recipe honest:
-# any config change has to be written down in the one file agents read first.
+# Fails a PR that changes a launcher without changing CURRENT.md, whose CURRENT.md
+# launcher hashes do not match the launchers in the tree, or whose launcher serve
+# argv breaks a rule we enforce by test. Keeps the golden recipe honest: any config
+# change has to be written down in the one file agents read first, and the
+# serve-argv rules (prompt-tokens-details on every launcher; the 1+k CUDA-graph
+# capture-size rule) cannot silently regress.
 on:
   pull_request:
     branches: [main]
@@ -23,3 +26,5 @@ jobs:
           fi
       - name: CURRENT.md hashes match the launchers
         run: bash scripts/check/check-current.sh
+      - name: launcher serve-argv regression
+        run: python3 scripts/check/test-prompt-token-details.py

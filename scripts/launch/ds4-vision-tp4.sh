@@ -3,8 +3,9 @@
 # DeepSeek-V4-Flash-Vision-Exp, TP4 across all 4 Sparks.
 # Extends scripts/launch/ds4-vision-tp2.sh (PROVEN vision env/mounts/args) from 2 -> 4 nodes.
 # Changed vs the TP2 launcher: tensor-parallel-size 2->4, nnodes 2->4, 4-node rank map,
-# max-num-seqs 12->64 and max-cudagraph-capture-size 12->64 (the 2026-09-02 validated run),
-# MODEL_DIR override, master-port 25440->25460. Everything else is byte-for-byte TP2.
+# max-num-seqs 12->64 and max-cudagraph-capture-size 12->66 (66 = 11*(k+1), the first capture
+# bucket that covers 64 requests; capture buckets are multiples of k+1=6), MODEL_DIR override,
+# master-port 25440->25460. Everything else is byte-for-byte TP2.
 # Head kept on ASUSI (rank0, .3) so the API endpoint stays 100.90.25.78:8888 (no rewiring).
 # Node->rank: rank0=Asusi .3 (HEAD, :8888, NFS) | rank1=Bluey .1 (local wts) | rank2=Reddie .2 (NFS) | rank3=Spark4 .4 (NFS)
 # Run WORKER-FIRST: ranks 3,2,1 (headless) then rank 0 (head).  Usage: ds4-vision-tp4.sh <0|1|2|3>
@@ -107,7 +108,7 @@ docker run -d --name "$NAME" --restart no \
       --max-model-len 1048576 \
       --max-num-seqs 64 \
       --max-num-batched-tokens 8192 \
-      --max-cudagraph-capture-size 64 \
+      --max-cudagraph-capture-size 66 \
       --gpu-memory-utilization 0.85 \
       --enable-prefix-caching \
       --enable-prompt-tokens-details \

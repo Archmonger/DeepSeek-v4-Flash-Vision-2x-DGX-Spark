@@ -596,9 +596,9 @@ docker exec <container> grep -c "PATCH(stop-in-reasoning)" \
   "$VLLM_ROOT/v1/engine/detokenizer.py"        # >= 1 when applied
 ```
 
-**Both nodes.** The launcher syncs the compose and env files to the worker but **not**
-bind-mounted patch files. The file must exist at the same path on the worker too, or it silently
-runs unpatched and you get confusing half-fixed results.
+**Both nodes.** The launcher does **not** sync patch files to the worker — it only checks that
+they exist locally and bind-mounts them. The file must exist at the same path on every node, or
+that node silently runs unpatched and you get confusing half-fixed results.
 
 ### Known side effect: reasoning runaways become more visible, not less
 
@@ -941,8 +941,8 @@ file from one build onto another produces errors like
 `propose() got an unexpected keyword argument 'req_ids'`. This is why:
 
 - the vision files are generated from the running image rather than checked in (issue #46);
-- `docker-compose.dspark.yml` deliberately does **not** bind-mount a proposer copy ("a copy
-  from one vLLM version crashes another");
+- nothing ships a generic proposer copy to mount around — the launchers mount only the specific
+  staged files the recipe pins, all generated or verified against the image you are running;
 - for third-party images, the guard should be applied in place with
   [`../scripts/patching/apply-nonuniform-guard.py`](../scripts/patching/apply-nonuniform-guard.py) instead of a
   copied file;

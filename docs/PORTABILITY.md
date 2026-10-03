@@ -19,13 +19,7 @@ vllm serve: error: argument --kv-cache-dtype: invalid choice: 'nvfp4_ds_mla'
 The dtype comes from `recipe/nvfp4/Dockerfile.stage-{a,b,c}`, chained on top of the
 overlay. A one-line note near the build instructions would save the boot cycle.
 
-## 2. The launcher uses the root compose file
-
-`start-deepseek-v4-flash-dspark.sh` defaults to `./docker-compose.dspark.yml`.
-Edits made to any other copy of the compose file are silently ignored — easy to
-lose time on when two copies exist and look equivalent.
-
-## 3. `GLOO_SOCKET_IFNAME` / `TP_SOCKET_IFNAME` are baked into the base image
+## 2. `GLOO_SOCKET_IFNAME` / `TP_SOCKET_IFNAME` are baked into the base image
 
 The base image ships these pointing at the author's NIC. On another host that
 interface is down or absent and rank init dies in:
@@ -34,31 +28,32 @@ interface is down or absent and rank init dies in:
 RuntimeError: [enforce fail at /pytorch/third_party/gloo/gloo/transport/tcp/device.cc]
 ```
 
-The compose file passes `NCCL_SOCKET_IFNAME` through but not these two, so a correct
-`.env.dspark` still boots into the failure. **This PR defaults both to
-`NCCL_SOCKET_IFNAME`**, which makes one value in `.env.dspark` cover all three.
+The shipped launchers set all three of `NCCL_SOCKET_IFNAME`, `GLOO_SOCKET_IFNAME`
+and `TP_SOCKET_IFNAME` explicitly, so they are fine. The trap is for anyone writing
+their own `docker run` or service unit from a `.env.dspark`: passing only the NCCL
+one still boots into the failure above. **Set all three** (defaulting the Gloo/TP
+pair to the NCCL value makes a single setting cover them).
 
-## 4. `DSPARK_MODEL` and symlinks
+## 3. The weights mount must contain a real directory
 
-Serving weights already on disk needs a bind mount (the compose assumes the HF cache
-path). Once mounted, `DSPARK_MODEL` must be a real directory inside the mount — a
-symlink whose target is a host path outside it resolves to nothing the container can
-see, and vLLM falls back to treating the value as a repo id:
+Serving weights already on disk needs a bind mount — the launchers mount the host
+weights directory at `/models` and address `$MODEL_DIR` inside it. `MODEL_DIR` must
+be a real directory inside that mount: a symlink whose target is a host path outside
+it resolves to nothing the container can see, and vLLM falls back to treating the
+value as a repo id:
 
 ```
 huggingface_hub.errors.HFValidationError: Repo id must be in the form ...
 ```
 
-This PR documents the override-file pattern for the mount rather than adding an
-unconditional volume, so nothing changes for HF-cache users.
+## 4. systemd needs `HOME`
 
-## 5. systemd needs `HOME`
+`.env.dspark` expands `${HOME}` (for `HF_CACHE`), and the launchers use `$HOME` for
+their cache dirs under `set -u`. Under a systemd unit `HOME` is unset and the launch
+aborts with `HOME: unbound variable`. Adding `Environment=HOME=/root` to the unit
+fixes it.
 
-`.env.dspark` expands `${HOME}` (for `HF_CACHE`). Under a systemd unit `HOME` is
-unset and the launcher aborts with `HOME: unbound variable`. Adding
-`Environment=HOME=/root` to the unit fixes it.
-
-## 6. GB10 power state after a reboot (not a recipe bug, but it looks like one)
+## 5. GB10 power state after a reboot (not a recipe bug, but it looks like one)
 
 Worth flagging because the symptom mimics a bad config. After one of our nodes
 crashed and rebooted, it sat at ~22 W / 2086 MHz under load while the healthy node
@@ -77,7 +72,7 @@ nvidia-smi --query-gpu=clocks.sm,power.draw --format=csv,noheader
 # asymmetry between the two nodes => this
 ```
 
-## 7. Thinking is off by default, and that is measurable
+## 6. Thinking is off by default, and that is measurable
 
 `--default-chat-template-kwargs '{"thinking":false}'` is a throughput choice, not a bug.
 Know it before comparing a local deployment with a hosted one: turning reasoning on moves

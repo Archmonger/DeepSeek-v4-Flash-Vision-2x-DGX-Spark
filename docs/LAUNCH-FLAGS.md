@@ -14,9 +14,8 @@ Patch 3/Patch 4 overlay, so both arrive here as read-only bind mounts.
 
 Not on this page: patch delivery and verification → [`PATCHES.md`](PATCHES.md); node/rank map,
 preflight and the live numbers → [`../CURRENT.md`](../CURRENT.md); runtime env (B12X, DSpark,
-NCCL/RoCE, JIT-cache split) → [`.env.dspark.example`](../.env.dspark.example) and
-[`docker-compose.dspark.yml`](../docker-compose.dspark.yml); how to read a throughput figure →
-[`BENCHMARKS.md`](BENCHMARKS.md).
+NCCL/RoCE, JIT-cache split) → [`.env.dspark.example`](../.env.dspark.example) and the launcher
+`-e` blocks; how to read a throughput figure → [`BENCHMARKS.md`](BENCHMARKS.md).
 
 ```
 /opt/env/bin/vllm serve <path-to-DeepSeek-V4-Flash-Vision-Exp> \
@@ -66,11 +65,16 @@ NCCL/RoCE, JIT-cache split) → [`.env.dspark.example`](../.env.dspark.example) 
 - **`--gpu-memory-utilization 0.85`** — not a tunable to shave for headroom. 0.80 boots and
   passes smoke tests, then dies under traffic, because DSpark allocates its buffers on the first
   real request.
-- **`--max-cudagraph-capture-size 12`** — pinned to `--max-num-seqs` on TP2; TP4 runs `64`/`64`.
-  Capture sizes are bucketed in multiples of `k+1`, and a value that lands low can floor the
-  captured graph down to roughly one request's worth — any concurrency above it then falls off
-  the captured path into eager/piecewise and throughput collapses silently
-  (@Wpnx330, [PR #5](https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-1M-NVFP4-KV-2x-DGX-Spark/pull/5)).
+- **`--max-cudagraph-capture-size`** — must be a **multiple of `1+k`** and **at least
+  `--max-num-seqs`**. Under speculative decoding the CUDA-graph capture buckets are multiples
+  of `1+k` (`k=5` → 6, 12, 18, …), so a value that floors below your concurrency drops the
+  excess requests off the captured path into eager/piecewise and throughput collapses
+  **silently** (@Wpnx330,
+  [PR #5](https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-1M-NVFP4-KV-2x-DGX-Spark/pull/5)).
+  This recipe sets `12` on TP2 (`= 2×6`, covering `--max-num-seqs 12` exactly) and **`66`**
+  on TP4 (`= 11×6`, the smallest bucket that covers `--max-num-seqs 64`). Both are asserted
+  by `scripts/check/test-prompt-token-details.py`, so a future `--max-num-seqs` bump that
+  breaks the rule fails CI rather than costing half of throughput at 3 a.m.
   The drafter-side variant of the same problem is Patch A ([`PATCHES.md`](PATCHES.md)).
 - **`--enable-prefix-caching` + `--enable-prompt-tokens-details`** — caching plus the per-request
   `usage.prompt_tokens_details.cached_tokens` readout

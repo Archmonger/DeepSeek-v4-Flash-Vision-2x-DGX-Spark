@@ -53,10 +53,11 @@ tokens** · `--max-num-seqs 12` at `--gpu-memory-utilization 0.85`.
 **Recipe deltas from TP2:** same image, same `k=5` probabilistic DSpark, same
 `nvfp4_ds_mla` KV, same `--gpu-memory-utilization 0.85` and `--max-model-len 1048576`;
 `--tensor-parallel-size 4`, `--nnodes 4`, **`--max-num-seqs 64`** and
-**`--max-cudagraph-capture-size 64`**. CUDA graphs are on (`--enforce-eager` is not passed and
-the head log shows `Graph capturing finished in 10 secs, took 0.68 GiB`); the launcher sets no
-cudagraph-mode env var, so the mode is the image's own default rather than something this
-recipe pins.
+**`--max-cudagraph-capture-size 66`** (`= 11×(1+k)`, the smallest capture bucket covering 64
+requests — see [`docs/LAUNCH-FLAGS.md`](docs/LAUNCH-FLAGS.md)). CUDA graphs are on
+(`--enforce-eager` is not passed and the head log shows `Graph capturing finished in 10 secs,
+took 0.68 GiB`); the launcher sets no cudagraph-mode env var, so the mode is the image's own
+default rather than something this recipe pins.
 
 **Expected (TP4):**
 
@@ -81,8 +82,8 @@ recipe pins.
   `VLLM_SWA_RECYCLE_SKIPPED_BLOCKS=${SWA_RECYCLE:-1}`. Measured on TP2: a 354K-token prompt
   re-sent after another 354K of prefill hits 100% in 1.2 s where the stock image gives 0% and a
   235 s cold re-prefill.
-- Both launchers and `docker-compose.dspark.yml` pass `--enable-prompt-tokens-details`, so
-  clients can read `usage.prompt_tokens_details.cached_tokens`
+- Both launchers pass `--enable-prompt-tokens-details`, so clients can read
+  `usage.prompt_tokens_details.cached_tokens`
   ([`docs/CACHE-REPORTING.md`](docs/CACHE-REPORTING.md)).
 - Workers mount Bluey's weights export at `/mnt/bluey-models`.
 - **Drop the page cache on all nodes before launch.**
@@ -105,13 +106,16 @@ per-boot figure, reporting conditions with the number — lives in
   in-container ([`sparkrun/README.md`](sparkrun/README.md)). It serves under the id
   `deepseek-v4-flash-vision-exp`; the launchers serve `deepseek-v4-flash-dspark`. Clients
   pointed at `:8888` use the launcher's id.
-- **The Compose files are the generic two-node serve/build configuration**:
-  `docker-compose.dspark.yml` plus [`.env.dspark.example`](.env.dspark.example) — the template
-  for the `.env.dspark` that `scripts/build/build-dspark-vllm-runtime.sh` also sources.
+- **`.env.dspark` is the fleet env template**
+  ([`.env.dspark.example`](.env.dspark.example)) for the scripts that source it —
+  `scripts/build/build-dspark-vllm-runtime.sh`, `scripts/serve/prepare-dspark-model-cache.sh`
+  and `scripts/serve/smoke-deepseek-v4-flash-dspark.sh`. The launchers take their
+  configuration from their own `-e` blocks plus `PROTECTED_FRACTION` / `SWA_RECYCLE` /
+  `MODEL_DIR` from the ambient shell, and do **not** source `.env.dspark`.
 - **Serving is k=5 probabilistic DSpark at `--max-model-len 1048576`**, thinking off by
   default ([`docs/REASONING-MODE.md`](docs/REASONING-MODE.md)).
 - **Vision-Exp is the only supported model.**
 
 <!-- launcher hashes, maintained by scripts/check/check-current.sh --write -->
 sha256 117d38d99bb77a9af4e0ced68e5e736ff720ea72845d451614ed449bb3b22f56  scripts/launch/ds4-vision-tp2.sh
-sha256 4d94cb121b5689d91b73ed3c37b4308ad88cbe4f9fff34032c25c3480a78bc8e  scripts/launch/ds4-vision-tp4.sh
+sha256 4f6d5183cb88a883bfbc0bd9f910c834344c1c81f19b29288b3108f81aa1571c  scripts/launch/ds4-vision-tp4.sh

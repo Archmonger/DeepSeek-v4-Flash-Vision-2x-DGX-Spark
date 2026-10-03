@@ -102,7 +102,7 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | `scripts/` | **every runnable script**, grouped by job — see [`scripts/README.md`](scripts/README.md) |
 | `scripts/launch/` | the two runnable launchers: `ds4-vision-tp2.sh <0\|1>`, `ds4-vision-tp4.sh <0\|1\|2\|3>` |
 | `scripts/build/` | image build (`build-dspark-vllm-runtime.sh`), vision-port file generation, overlay source check |
-| `scripts/serve/` | the Compose lane: start / stop / status / logs / smoke, config validation, model-cache prep |
+| `scripts/serve/` | model-cache prep (`prepare-dspark-model-cache.sh`) and the end-to-end smoke test (`smoke-deepseek-v4-flash-dspark.sh`) |
 | `scripts/check/` | the CI guard (`check-current.sh`) and the fail-closed preflights (`check-patch3.sh`, `check-patch4.sh`) |
 | `scripts/bench/` | measurement harnesses (peak, soak, concurrency, garble taps) |
 | `scripts/diagnose/`, `scripts/patching/`, `scripts/experimental/` | output-shape analysis, in-place patchers, alternate-runtime lanes |
