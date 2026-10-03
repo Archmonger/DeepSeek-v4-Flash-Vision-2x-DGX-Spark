@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-patch4.sh — fail-closed preflight for the DSpark draft shared-expert loader fix.
 #
-# Patch 4 (see DSPARK-SHARED-EXPERT-FIX.md) adds two rows to _STACKED_PARAM_NAME_MAPPING in
+# Patch 4 (see docs/PATCHES.md) adds two rows to _STACKED_PARAM_NAME_MAPPING in
 # vllm/v1/spec_decode/dspark.py so the DSpark draft's always-on shared expert
 # (shared_experts.gate_up_proj, fed by checkpoint tensors w1/w3) actually loads. WITHOUT it the
 # stock loader drops 12 tensors via logger.debug("Skipping unknown DSpark weight") — invisible at

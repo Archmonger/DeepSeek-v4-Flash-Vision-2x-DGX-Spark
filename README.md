@@ -74,7 +74,7 @@ one place: **[`docs/PATCHES.md`](docs/PATCHES.md)**.
 | **Concurrency** | `--max-num-seqs 12` (TP2) · `64` (TP4) |
 | **Speculative decoding** | DSpark, `num_speculative_tokens: 5`, `draft_sample_method: probabilistic` |
 | **Serving** | port `8888` · `--enable-prefix-caching` · `--enable-prompt-tokens-details` · `--async-scheduling` · `--enable-chunked-prefill` |
-| **Reasoning** | off by default (`--default-chat-template-kwargs '{"thinking":false}'`) — see [reasoning mode](docs/reasoning-mode.md) |
+| **Reasoning** | off by default (`--default-chat-template-kwargs '{"thinking":false}'`) — see [reasoning mode](docs/REASONING-MODE.md) |
 
 KV pool size is a **per-boot** figure that swings with unified-memory usage; read it off
 the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS.md)).
@@ -84,15 +84,16 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | I want to… | Go to |
 |---|---|
 | know exactly what runs today, pinned | [`CURRENT.md`](CURRENT.md) |
-| understand the TP2 command flag by flag | [`VISION-EXP-DEFAULT-CONFIG.md`](VISION-EXP-DEFAULT-CONFIG.md) |
+| understand the TP2 command flag by flag | [`docs/LAUNCH-FLAGS.md`](docs/LAUNCH-FLAGS.md) |
 | understand the patches | [`docs/PATCHES.md`](docs/PATCHES.md) |
-| work with thinking / `reasoning_effort` | [`docs/reasoning-mode.md`](docs/reasoning-mode.md) |
-| read cache hits per request | [`docs/cache-reporting.md`](docs/cache-reporting.md) |
+| work with thinking / `reasoning_effort` | [`docs/REASONING-MODE.md`](docs/REASONING-MODE.md) |
+| read cache hits per request | [`docs/CACHE-REPORTING.md`](docs/CACHE-REPORTING.md) |
 | debug a broken or slow deployment | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
 | benchmark without fooling myself | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) |
 | understand the vision port internals | [`vision-exp/README.md`](vision-exp/README.md) |
 | run this on hardware that isn't the author's | [`docs/PORTABILITY.md`](docs/PORTABILITY.md) |
 | one-command deployment via sparkrun | [`sparkrun/README.md`](sparkrun/README.md) |
+| evaluate a move to stock vLLM official main / v0.24+ | [`docs/UPGRADE-OFFICIAL-MAIN.md`](docs/UPGRADE-OFFICIAL-MAIN.md) |
 | see who did what | [`CREDITS.md`](CREDITS.md) |
 
 ## Repository layout
@@ -105,7 +106,7 @@ the boot log of the boot you are quoting ([`docs/BENCHMARKS.md`](docs/BENCHMARKS
 | `patches/` | patch files and patchers applied to the runtime |
 | `scripts/` | preflight checks (`check-patch3.sh`, `check-patch4.sh`), sanity benches, guards |
 | `benchmarks/` | measurement harnesses (peak, soak, concurrency, garble taps) |
-| `docs/` | reference docs — patches, reasoning mode, troubleshooting, benchmarking, portability, cache reporting |
+| `docs/` | reference docs — patches, launch flags, reasoning mode, cache reporting, troubleshooting, benchmarking, portability, the upgrade path |
 | `sparkrun/` | self-contained sparkrun recipes |
 | `tools/` | repo maintenance; `check-current.sh` keeps `CURRENT.md`'s launcher hashes honest |
 

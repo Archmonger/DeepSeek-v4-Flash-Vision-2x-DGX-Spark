@@ -77,38 +77,12 @@ nvidia-smi --query-gpu=clocks.sm,power.draw --format=csv,noheader
 # asymmetry between the two nodes => this
 ```
 
-## 7. `--default-chat-template-kwargs '{"thinking":false}'`
+## 7. Thinking is off by default, and that is measurable
 
-Not a bug — the recipe optimises for throughput. But it is worth stating loudly,
-because the model ships no Jinja chat template (only `encoding/` scripts), so
-the only thing that turns reasoning back on is:
-
-```json
-"chat_template_kwargs": {"thinking": true, "reasoning_effort": "high"}
-```
-
-Top-level `reasoning_effort` is ignored. Levels are `low` (default) / `high` / `max`.
-
-Measured on our own execution-graded harness (LiveCodeBench-style, 20 frozen
-problems, 3 public + up to 40 private tests per problem, a problem counts only when
-every private test passes; plus a procedural seed-generated suite of 48 cases):
-
-| | procedural suite | LCB, one-shot | LCB, after a 32k-token retry of the failures |
-|---|---|---|---|
-| thinking off (recipe default) | 0.875 | 12/20 | 13/20 |
-| **thinking on, effort high** | **0.979** | 11/20 | **20/20** |
-
-The one-shot number goes *down* when reasoning is enabled — with an 8k cap the model
-spends the budget thinking and gets truncated. Every one of the nine failures was
-`finish_reason=length`, and all nine passed once retried with a 32k budget. Anyone
-benchmarking this recipe should report the thinking setting and retry
-length-capped failures, or the result measures the cap rather than the model.
-
-## 8. Streamed reasoning field name
-
-The runtime emits `delta.reasoning`; OpenAI-compatible clients expect
-`delta.reasoning_content`. Clients that render a reasoning panel sit on "Thinking…"
-until the whole response lands. A small translating proxy in front of the server is
-enough; noting it in the README would spare people the debugging.
-Reasoning-mode behaviour and the per-request overrides are covered in
-[`reasoning-mode.md`](reasoning-mode.md).
+`--default-chat-template-kwargs '{"thinking":false}'` is a throughput choice, not a bug.
+Know it before comparing a local deployment with a hosted one: turning reasoning on moves
+graded quality materially (procedural suite 0.875 → 0.979), and a low output cap makes
+thinking look *worse* rather than better — every length-capped failure in our run passed
+once retried at 32k. Measured tables, the `reasoning` vs `reasoning_content` field-name
+gotcha, and the per-request overrides are all in
+[`REASONING-MODE.md`](REASONING-MODE.md).

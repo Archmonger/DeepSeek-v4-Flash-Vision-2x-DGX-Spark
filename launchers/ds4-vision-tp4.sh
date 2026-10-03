@@ -46,7 +46,7 @@ docker run -d --name "$NAME" --restart no \
   -v "$HOME/.cache/huggingface:/cache/huggingface" \
   -v "$HOME/.cache/vllm-dspark:/vllm-cache" \
   -v /var/tmp/patch3-scheduler.py:/opt/env/lib/python3.12/site-packages/vllm/v1/core/sched/scheduler.py:ro \
-  `# Patch 6: cap prompt-block protection + recycle sliding-window pages in-request (docs/PATCH6-KV-CACHE-PREFIX-EVICTION.md)` \
+  `# Patch 6: cap prompt-block protection + recycle sliding-window pages in-request (docs/PATCHES.md)` \
   -v /var/tmp/patch6-single_type_kv_cache_manager.py:/opt/env/lib/python3.12/site-packages/vllm/v1/core/single_type_kv_cache_manager.py:ro \
   -e VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION="${PROTECTED_FRACTION:-0.30}" \
   -e VLLM_SWA_RECYCLE_SKIPPED_BLOCKS="${SWA_RECYCLE:-1}" \

@@ -2,7 +2,7 @@
 # ds4-vision-tp2.sh <0|1>
 # DeepSeek-V4-Flash-Vision-Exp, TP2 across asusi (rank0/head) + bluey (rank1).
 # The serving profile is the validated Vision-Exp 1M/TP2 config recorded in
-# CURRENT.md and VISION-EXP-DEFAULT-CONFIG.md, adapted for this fleet:
+# CURRENT.md and docs/LAUNCH-FLAGS.md, adapted for this fleet:
 #   * model path  -> the locally downloaded Vision-Exp checkpoint
 #   * rank map    -> asusi 192.168.192.3 (head) / bluey 192.168.192.1 (worker)
 #   * NCCL_IB_HCA / SOCKET_IFNAME -> this fleet's actual devices (the repo ships placeholders)
@@ -49,11 +49,11 @@ docker run -d --name "$NAME" --restart no \
   -v "$HOME/.cache/huggingface:/cache/huggingface" \
   -v "$HOME/.cache/vllm-dspark:/vllm-cache" \
   -v /var/tmp/patch3-scheduler.py:/opt/env/lib/python3.12/site-packages/vllm/v1/core/sched/scheduler.py:ro \
-  `# Patch 6: cap prompt-block protection + recycle sliding-window pages in-request; without it long conversations lose their prefix cache (docs/PATCH6-KV-CACHE-PREFIX-EVICTION.md)` \
+  `# Patch 6: cap prompt-block protection + recycle sliding-window pages in-request; without it long conversations lose their prefix cache (docs/PATCHES.md)` \
   -v /var/tmp/patch6-single_type_kv_cache_manager.py:/opt/env/lib/python3.12/site-packages/vllm/v1/core/single_type_kv_cache_manager.py:ro \
   -e VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION="${PROTECTED_FRACTION:-0.30}" \
   -e VLLM_SWA_RECYCLE_SKIPPED_BLOCKS="${SWA_RECYCLE:-1}" \
-  `# Patch 4: DSpark draft shared-expert loader fix. Without it the always-on shared expert loads uninitialised and the draft runs at ~half speed, silently (DSPARK-SHARED-EXPERT-FIX.md). Verify: scripts/check-patch4.sh` \
+  `# Patch 4: DSpark draft shared-expert loader fix. Without it the always-on shared expert loads uninitialised and the draft runs at ~half speed, silently (docs/PATCHES.md). Verify: scripts/check-patch4.sh` \
   -v /var/tmp/spec-dspark.py:/opt/env/lib/python3.12/site-packages/vllm/v1/spec_decode/dspark.py:ro \
   `# Vision-Exp port: DeepseekV4ForCausalLM has no vision tower/aligner, so the` \
   `# stock class rejects the checkpoint with "no module or parameter named aligner".` \

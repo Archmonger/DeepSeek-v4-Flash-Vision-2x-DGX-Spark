@@ -1,9 +1,8 @@
 # DeepSeek V4 Flash Vision-Exp (DSpark) — native image input, 1M ctx, NVFP4 KV — 2x DGX Spark
 # sparkrun recipe for the experimental VISION build DeepSeek-V4-Flash-Vision-Exp.
 # It is the base NVFP4 DSpark recipe + the vision port, fully self-contained: pre_exec fetches
-# the vision port from this repo's `vision-exp-default` branch (it is NOT in main — see
-# VISION-EXP-DEFAULT-CONFIG.md) and injects it into the runtime, so nothing must be
-# staged by hand on the nodes.
+# the vision port from this repo's `vision-exp-default` branch (it is NOT in main) and injects it
+# into the runtime, so nothing must be staged by hand on the nodes.
 # WHY A PORT IS NEEDED:
 #   DeepSeek-V4-Flash-Vision-Exp reports the SAME architectures string as the text-only
 #   DeepSeek V4 lane
@@ -76,7 +75,7 @@ defaults:
   # 1M = the model's calibrated YaRN ceiling (65536 x factor 16). Anything past it is
   # extrapolation, not calibration; 1M is what the launchers run.
   max_model_len: 1048576
-  # 12 slots / 0.85 gmu = the vision port's verified-live lane (VISION-EXP-DEFAULT-CONFIG.md
+  # 12 slots / 0.85 gmu = the vision port's verified-live lane (docs/LAUNCH-FLAGS.md
   # and the vision-exp-default deployment). The 6/0.78 profile is the conservative text-lane
   # setting; the vision port runs 12/0.85 in production.
   max_num_seqs: 12

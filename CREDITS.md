@@ -21,33 +21,25 @@ The validated concurrency numbers in this repo depend directly on that patch.
 
 ## DSpark Cold-Start Garble Root-Cause Fix (Patch 3)
 
-The scheduler-level root cause of the cold-resume garble (prompt echo / leaked
-tool-schema text at the start of a reply on long resumed conversations) was tracked
-down and fixed as a collaboration between **Roady001** and **Fable**:
+The scheduler-level root cause of the cold-resume garble (prompt echo / leaked tool-schema text
+at the start of a reply on long resumed conversations) was tracked down and fixed as a
+collaboration between **Roady001** and **Fable**:
 
-- **Roady001** — reported the issue: the launch/config workarounds in circulation
-  only reduce the symptom and do not address the root cause. He independently validated
-  the final fix on his own 2x DGX Spark, confirming the garble is gone without any of
-  the earlier config changes.
+- **Roady001** — reported the issue, showed that the launch/config workarounds in circulation
+  only reduce the symptom, and independently validated the final fix on his own 2x DGX Spark.
   Issue: https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-1M-NVFP4-KV-2x-DGX-Spark/issues/3
-- **Fable** — the root-cause analysis and the patch: a guard in
-  `Scheduler.update_from_output` so spec-token placeholders are only resized on genuine
-  decode steps (`new_token_ids` non-empty, `not request.is_prefill_chunk`,
-  `status == RUNNING`) — never on a mid chunked-prefill final chunk or a preempted request.
+- **Fable** — the root-cause analysis and the patch.
+  Fix commit: https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-1M-NVFP4-KV-2x-DGX-Spark/commit/e83606a
 
-This is the actual root cause of the cold-resume prompt-echo / tool-schema garble, not
-the launch/config changes, which only reduced the symptom.
-Fix commit: https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-1M-NVFP4-KV-2x-DGX-Spark/commit/e83606a
-See `docs/PATCHES.md` (Patch 3) for the full analysis.
+Mechanism, the `Scheduler.update_from_output` guard and how to verify it landed:
+[`docs/PATCHES.md`](docs/PATCHES.md) (Patch 3).
 
 ## CUDA-Graph Capture-Size Fix (concurrency throughput)
 
-**Wpnx330** found and fixed a silent throughput cliff: `--max-cudagraph-capture-size`
-must be a multiple of `(MTP_NUM_TOKENS + 1)`. Passing a raw `MAX_NUM_SEQS` that isn't
-gets floored down to the largest multiple below it — potentially to a single request's
-worth of captured graph — and any concurrency above that falls off the captured CUDA-graph
-path into eager/piecewise, where throughput collapses. Fix:
-`--max-cudagraph-capture-size $((MAX_NUM_SEQS * (MTP_NUM_TOKENS + 1)))`.
+**Wpnx330** found and fixed a silent throughput cliff: a `--max-cudagraph-capture-size` that
+floors below the workload drops concurrency off the captured CUDA-graph path into
+eager/piecewise. What the flag does in this recipe:
+[`docs/LAUNCH-FLAGS.md`](docs/LAUNCH-FLAGS.md).
 
 - PR: https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-1M-NVFP4-KV-2x-DGX-Spark/pull/5
 

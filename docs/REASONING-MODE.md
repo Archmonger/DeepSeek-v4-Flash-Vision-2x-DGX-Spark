@@ -112,3 +112,19 @@ There is no way to reach the template's three-way effort split without leaving
 Reasoning consumes `max_tokens` before any content is produced, so a small cap
 yields `finish_reason: length` with empty `content`. Benchmarking thinking mode at a
 low cap measures truncation, not the model.
+
+## What thinking buys (measured)
+
+Execution-graded harness: 20 frozen LiveCodeBench-style problems, 3 public + up to 40
+private tests each (a problem counts only when every private test passes), plus a
+procedural seed-generated suite of 48 cases.
+
+| | procedural suite | LCB, one-shot | LCB, failures retried at a 32k budget |
+|---|---|---|---|
+| thinking off (recipe default) | 0.875 | 12/20 | 13/20 |
+| **thinking on, effort high** | **0.979** | 11/20 | **20/20** |
+
+The one-shot number goes *down* with reasoning enabled: at an 8k cap the model spends
+the budget thinking and gets truncated. Every one of the nine failures was
+`finish_reason: length`, and all nine passed at 32k. Report the thinking setting and
+retry length-capped failures, or the result measures the cap rather than the model.
