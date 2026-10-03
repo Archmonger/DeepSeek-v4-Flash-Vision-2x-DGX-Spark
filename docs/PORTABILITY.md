@@ -3,8 +3,14 @@
 Notes from a clean-room bring-up on 2× DGX Spark (GB10 sm_121a, 200G CX7) that is
 not the machine this recipe was developed on. The recipe itself is correct — these
 are the places where a different host trips over an assumption. Numbers below were
-measured on the `deepseek-ai/DeepSeek-V4-Flash-0731` checkpoint with the Stage-C
+measured on this recipe (`deepseek-ai/DeepSeek-V4-Flash-Vision-Exp`) with the Stage-C
 runtime + the nvfp4 chain, DSpark k=5 probabilistic, 1M context.
+
+> **Which serving path this page applies to.** The gotchas below are host-level and bite either way,
+> but the ones about hardcoded NIC names, `$HOME` cache directories and bind mounts are
+> observations from the **legacy shell launcher**, which hardcodes the author's topology. On the
+> primary sparkrun path those are detected per host and overridden with `-o env.<VAR>=…` —
+> [`SPARKRUN-PARITY.md`](SPARKRUN-PARITY.md) §3 and §5.
 
 ## 1. `nvfp4_ds_mla` lives in the three-stage image, not the overlay
 
@@ -19,13 +25,7 @@ vllm serve: error: argument --kv-cache-dtype: invalid choice: 'nvfp4_ds_mla'
 The dtype comes from `recipe/nvfp4/Dockerfile.stage-{a,b,c}`, chained on top of the
 overlay. A one-line note near the build instructions would save the boot cycle.
 
-## 2. The launcher uses the root compose file
-
-`start-deepseek-v4-flash-dspark.sh` defaults to `./docker-compose.dspark.yml`.
-Edits made to `verified-deployed-2026-07-04/docker-compose.dspark.yml` are silently
-ignored — easy to lose time on when both files exist and look equivalent.
-
-## 3. `GLOO_SOCKET_IFNAME` / `TP_SOCKET_IFNAME` are baked into the base image
+## 2. `GLOO_SOCKET_IFNAME` / `TP_SOCKET_IFNAME` are baked into the base image
 
 The base image ships these pointing at the author's NIC. On another host that
 interface is down or absent and rank init dies in:
@@ -34,31 +34,32 @@ interface is down or absent and rank init dies in:
 RuntimeError: [enforce fail at /pytorch/third_party/gloo/gloo/transport/tcp/device.cc]
 ```
 
-The compose file passes `NCCL_SOCKET_IFNAME` through but not these two, so a correct
-`.env.dspark` still boots into the failure. **This PR defaults both to
-`NCCL_SOCKET_IFNAME`**, which makes one value in `.env.dspark` cover all three.
+The shipped launchers set all three of `NCCL_SOCKET_IFNAME`, `GLOO_SOCKET_IFNAME`
+and `TP_SOCKET_IFNAME` explicitly, so they are fine. The trap is for anyone writing
+their own `docker run` or service unit from a `.env.dspark`: passing only the NCCL
+one still boots into the failure above. **Set all three** (defaulting the Gloo/TP
+pair to the NCCL value makes a single setting cover them).
 
-## 4. `DSPARK_MODEL` and symlinks
+## 3. The weights mount must contain a real directory
 
-Serving weights already on disk needs a bind mount (the compose assumes the HF cache
-path). Once mounted, `DSPARK_MODEL` must be a real directory inside the mount — a
-symlink whose target is a host path outside it resolves to nothing the container can
-see, and vLLM falls back to treating the value as a repo id:
+Serving weights already on disk needs a bind mount — the launchers mount the host
+weights directory at `/models` and address `$MODEL_DIR` inside it. `MODEL_DIR` must
+be a real directory inside that mount: a symlink whose target is a host path outside
+it resolves to nothing the container can see, and vLLM falls back to treating the
+value as a repo id:
 
 ```
 huggingface_hub.errors.HFValidationError: Repo id must be in the form ...
 ```
 
-This PR documents the override-file pattern for the mount rather than adding an
-unconditional volume, so nothing changes for HF-cache users.
+## 4. systemd needs `HOME`
 
-## 5. systemd needs `HOME`
+`.env.dspark` expands `${HOME}` (for `HF_CACHE`), and the launchers use `$HOME` for
+their cache dirs under `set -u`. Under a systemd unit `HOME` is unset and the launch
+aborts with `HOME: unbound variable`. Adding `Environment=HOME=/root` to the unit
+fixes it.
 
-`.env.dspark` expands `${HOME}` (for `HF_CACHE`). Under a systemd unit `HOME` is
-unset and the launcher aborts with `HOME: unbound variable`. Adding
-`Environment=HOME=/root` to the unit fixes it.
-
-## 6. GB10 power state after a reboot (not a recipe bug, but it looks like one)
+## 5. GB10 power state after a reboot (not a recipe bug, but it looks like one)
 
 Worth flagging because the symptom mimics a bad config. After one of our nodes
 crashed and rebooted, it sat at ~22 W / 2086 MHz under load while the healthy node
@@ -77,36 +78,12 @@ nvidia-smi --query-gpu=clocks.sm,power.draw --format=csv,noheader
 # asymmetry between the two nodes => this
 ```
 
-## 7. `--default-chat-template-kwargs '{"thinking":false}'`
+## 6. Thinking is on by default, and it is worth the tokens
 
-Not a bug — the recipe optimises for throughput. But it is worth stating loudly,
-because the checkpoint has no Jinja chat template (it ships `encoding/` scripts), so
-the only thing that turns reasoning back on is:
-
-```json
-"chat_template_kwargs": {"thinking": true, "reasoning_effort": "high"}
-```
-
-Top-level `reasoning_effort` is ignored. Levels are `low` (default) / `high` / `max`.
-
-Measured on our own execution-graded harness (LiveCodeBench-style, 20 frozen
-problems, 3 public + up to 40 private tests per problem, a problem counts only when
-every private test passes; plus a procedural seed-generated suite of 48 cases):
-
-| | procedural suite | LCB, one-shot | LCB, after a 32k-token retry of the failures |
-|---|---|---|---|
-| thinking off (recipe default) | 0.875 | 12/20 | 13/20 |
-| **thinking on, effort high** | **0.979** | 11/20 | **20/20** |
-
-The one-shot number goes *down* when reasoning is enabled — with an 8k cap the model
-spends the budget thinking and gets truncated. Every one of the nine failures was
-`finish_reason=length`, and all nine passed once retried with a 32k budget. Anyone
-benchmarking this checkpoint should report the thinking setting and retry
-length-capped failures, or the result measures the cap rather than the model.
-
-## 8. Streamed reasoning field name
-
-The runtime emits `delta.reasoning`; OpenAI-compatible clients expect
-`delta.reasoning_content`. Clients that render a reasoning panel sit on "Thinking…"
-until the whole response lands. A small translating proxy in front of the server is
-enough; noting it in the README would spare people the debugging.
+The launchers and recipes all pass `--default-chat-template-kwargs '{"thinking":true}'`. On the
+execution-graded suite that is 0.875 → 0.979 (procedural, 48 cases) for the extra decode cost.
+Two consequences for anyone comparing this box with another deployment: reasoning is returned on
+`message.reasoning` / `delta.reasoning` and **never** on `reasoning_content`, and reasoning
+consumes `max_tokens` before any content is produced — at an 8K cap the graded failures were all
+`finish_reason: length` and every one passed at 32K. Override per request with
+`chat_template_kwargs: {"thinking": false}`.

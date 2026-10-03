@@ -23,7 +23,7 @@ WHY
   ignore the `thinking` chat_template_kwarg (prompt token ids are identical
   either way) -- and the model opens `<think>` itself as its first OUTPUT
   token. On such deployments the guard never armed and the truncation
-  survived: measured live on a DeepSeek-V4-Flash-0731 derivative, a math
+  survived: measured live on a DeepSeek V4 Flash derivative, a math
   prompt with stop ["17 * 23"] died at 90 completion tokens with empty
   content AND empty reasoning_content. Whether the model opens a think tag
   at temp 0 is nondeterministic request-to-request, so a single probe that

@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Experimental DSpark draft model for DeepSeek V4 Flash.
 
-This module follows the reference implementation shipped with
-DeepSeek-V4-Flash-DSpark. It intentionally keeps the draft-side DSpark
+This module follows the reference DSpark implementation shipped with
+DeepSeek V4 Flash. It intentionally keeps the draft-side DSpark
 attention cache internal to the draft model instead of registering more vLLM
 KV-cache layers; DSpark uses a small sliding window over target features and
 draft block tokens, which is different from the normal MTP cache contract.
