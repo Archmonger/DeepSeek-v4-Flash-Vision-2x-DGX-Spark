@@ -3,13 +3,10 @@
 Reproducible recipe for serving **[`deepseek-ai/DeepSeek-V4-Flash-Vision-Exp`](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Vision-Exp)** on NVIDIA DGX Spark with
 vLLM, DSpark speculative decoding, and the `nvfp4_ds_mla` NVFP4 KV cache:
 **1M-token context with native image input**, and concurrency that stays clean under
-agent traffic. TP2 (2 nodes) and TP4 (4 nodes).
+agent traffic. TP2 (2 nodes) and TP4 (4 nodes). Reference material lives in [`docs/`](docs/).
 
-> **[`CURRENT.md`](CURRENT.md) is the source of truth** — pinned commits, node/rank maps,
-> preflight, and the numbers we actually measure. This page is the entry point; the
-> reference material lives in [`docs/`](docs/).
-
-This repo is **Vision-Exp only**.
+> [!NOTE]
+> This project is an effort to continue work on [Tonyd2wild's repository](https://github.com/tonyd2wild/DeepSeek-v4-Flash-Vision-Exp-DSpark-1M-NVFP4-KV-2x-DGX-Spark), targeting **Vision-Exp only**. This includes clean-up, optimization, bugfixes, and releasing results that **can be replicated by something other than Tony's personal machine**. No blindly vibe-coded changes. Everything undergoes human review.
 
 ## Quick start
 
@@ -31,38 +28,15 @@ vision port — verifying each step before the server starts. Budget ~200 GB fre
 | TP2 (2 nodes) | [`sparkrun/ds4-vision-exp-tp2_v1.yaml`](sparkrun/ds4-vision-exp-tp2_v1.yaml) |
 | TP4 (4 nodes) | [`sparkrun/ds4-vision-exp-tp4_v1.yaml`](sparkrun/ds4-vision-exp-tp4_v1.yaml) |
 
-The API serves at `http://<head>:8888/v1` under the model id **`deepseek-v4-flash-dspark`**.
 Full walkthrough, overrides and boot verification:
 [`sparkrun/README.md`](sparkrun/README.md) · exact parity against the launchers:
 [`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md).
 
-### Verify before you trust any number
+## Recipe configuration
 
-One class of failure is silent: a runtime that came up without Patch 4 costs roughly **half your
-decode speed while producing perfect output and no error**. The staging step is designed to abort
-rather than serve that way, but confirm it on the boot you are quoting:
-
-```bash
-sparkrun logs ds4-vision-exp-tp2_v1 | grep -E "stage-runtime|FATAL"
-sparkrun logs ds4-vision-exp-tp2_v1 | grep "Using 'B12X' Mxfp4 MoE backend"
-```
-
-A missing B12X line is the half-speed fallback. Full post-boot checklist (every rank): §6 of
-[`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md). The patch inventory itself is
-[`docs/PATCHES.md`](docs/PATCHES.md).
-
-## Patches
-
-Everything about the patches — inventory, symptoms, root causes, delivery (baked into the
-image vs read-only bind mount), staging, verification, and the environment knobs — lives in
-one place: **[`docs/PATCHES.md`](docs/PATCHES.md)**.
-
-## What the recipe pins
-
-| | |
+| Attribute | Value |
 |---|---|
 | **Checkpoint** | `DeepSeek-V4-Flash-Vision-Exp` @ `86f746b36186f0e567729a5c06a8c918caba82a9` |
-| **Drop-in variant** | same launcher with `MODEL_DIR=keys-DeepSeekV4Flash-Vision-EXP-ablit` |
 | **Topology** | TP2 (`--nnodes 2`) or TP4 (`--nnodes 4`), `--distributed-executor-backend mp` |
 | **Context** | `--max-model-len 1048576` |
 | **KV cache** | `--kv-cache-dtype nvfp4_ds_mla`, `--block-size 256` (Stage C padded envelope — see [troubleshooting](docs/TROUBLESHOOTING.md#the-nvfp4-path-is-the-stage-c-padded-envelope)) |
@@ -116,7 +90,7 @@ If you change a serving flag, a recipe or a launcher:
 
 1. Update `CURRENT.md` in the same PR, and say which line of it your change moves.
 2. Run `bash scripts/check/check-current.sh --write` (CI runs `bash scripts/check/check-current.sh`).
-3. Move the sparkrun recipe and the legacy launcher **together** —
+3. Modify the sparkrun recipe and the legacy launcher **together** —
    `python3 scripts/check/test-prompt-token-details.py` fails if one moves without the other, and
    [`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md) is the list it enforces.
 3. Quote performance from **real prompts**, warm, with the token count attached — see
