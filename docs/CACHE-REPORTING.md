@@ -17,10 +17,9 @@ restarts them. The accompanying CPU-only regression
 (`scripts/check/test-prompt-token-details.py`) checks the launch arguments on both
 launcher paths; it does not start a server or prove live cache reuse.
 
-**Known gap:** the [sparkrun](../sparkrun/README.md) recipe does **not** currently pass this
-flag, so `cached_tokens` is not reportable on that path. It is a serve-path drift of exactly
-the kind upstream PR #56 introduced; adding the flag there is a recipe change, so it has been
-left for an explicit decision.
+This was a drift for a while: the flag landed on the launchers first and the recipes lagged. Both
+sides are covered now, and `scripts/check/test-prompt-token-details.py` fails CI if either path
+loses the flag — the same class of drift upstream PR #56 introduced cannot silently return.
 
 Related: [CURRENT.md](../CURRENT.md) lists what each serve path passes, and
 [`PATCHES.md`](PATCHES.md) covers the KV-cache work behind the cached-token counts.
