@@ -6,8 +6,8 @@ FROM ${BASE_IMAGE}
 # The sparkrun recipe cannot run `docker build`. It rebuilds this stage inside an
 # already-running container by sed-extracting the Python between the quoted-PY
 # heredoc marker on the next line and the lone PY terminator at the end of the
-# file, then piping that to the interpreter — see the `pre_exec` block in
-# sparkrun/deepseek-v4-flash-0731-dspark-nvfp4-1m-vllm.yaml. Consequences:
+# file, then piping that to the interpreter — see scripts/build/stage-dspark-runtime.sh,
+# which every sparkrun recipe in this repo calls. Consequences:
 #
 #   * keep exactly ONE such heredoc per stage file
 #   * keep the opening marker exactly as written below: quoted, no space

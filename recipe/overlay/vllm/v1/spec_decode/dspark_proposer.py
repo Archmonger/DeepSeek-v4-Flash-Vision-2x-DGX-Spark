@@ -30,7 +30,7 @@ logger = init_logger(__name__)
 
 
 class DSparkProposer(SpecDecodeBaseProposer):
-    """DSpark proposer for DeepSeek V4 Flash DSpark.
+    """DSpark proposer for DeepSeek V4 Flash.
 
     DSpark's draft model owns a small internal sliding-window cache over
     target-layer features. It does not allocate draft KV blocks through vLLM's

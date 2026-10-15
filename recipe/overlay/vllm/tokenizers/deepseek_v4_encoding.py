@@ -67,8 +67,8 @@ tool_output_template: str = (
     "<tool_result>{content}</tool_result>"
 )
 
-# Reasoning effort levels, taken verbatim from DeepSeek's own reference encoder
-# (encoding/encoding_dsv4.py in the DeepSeek-V4-Flash-0731 repo). The stock build
+# Reasoning effort levels, taken verbatim from DeepSeek's own reference encoder,
+# `encoding/encoding_dsv4.py`. The stock build
 # carried only ONE constant, named REASONING_EFFORT_MAX but byte-identical to
 # upstream's *high* text -- so `high` was a silent no-op and upstream's real `max`
 # was unreachable. `low` is the default and deliberately adds nothing.

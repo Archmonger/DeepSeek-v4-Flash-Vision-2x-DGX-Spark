@@ -465,8 +465,8 @@ def infer_dspark_weight_prefix(weight_names: Sequence[str]) -> str | None:
 def infer_dspark_num_draft_layers(weight_names: Sequence[str]) -> int | None:
     """Infer how many DSpark draft stages are present in a checkpoint.
 
-    The DeepSeek-V4-Flash-DSpark release stores the DSpark draft stages under
-    the historical `mtp.N.*` namespace. Unlike regular MTP, the HF config still
+    The DSpark release stores its draft stages under the historical
+    `mtp.N.*` namespace. Unlike regular MTP, the HF config still
     reports `num_nextn_predict_layers=1`, so the weight map is the reliable
     source for the DSpark draft depth.
     """

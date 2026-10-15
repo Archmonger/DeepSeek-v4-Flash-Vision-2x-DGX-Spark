@@ -11,5 +11,6 @@
 
 **Checklist**
 - [ ] I rebased on current `main` (stale PRs merge old configs over the current recipe)
-- [ ] `CURRENT.md` updated in this PR if a launcher or a serving flag changed, and `bash tools/check-current.sh --write` was run
+- [ ] `CURRENT.md` updated in this PR if a launcher, a recipe or a serving flag changed, and `bash scripts/check/check-current.sh --write` was run
+- [ ] Sparkrun recipe and legacy launcher moved **together** if a serving flag moved (`python3 scripts/check/test-prompt-token-details.py` enforces the parity listed in `docs/SPARKRUN-PARITY.md`)
 - [ ] Speed numbers are from real prompts (prose, code, ...); any counting-prompt number is labeled as the draft-acceptance ceiling; prefill is cold

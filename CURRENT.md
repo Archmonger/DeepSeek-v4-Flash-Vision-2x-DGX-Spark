@@ -1,17 +1,50 @@
-Both launchers read `MODEL_DIR` (default `DeepSeek-V4-Flash-Vision-Exp`); the uncensored build is the same launcher with `MODEL_DIR=keys-DeepSeekV4Flash-Vision-EXP-ablit`.
+# CURRENT — the live recipe
 
-**Expected (TP2):**
+The golden record: what actually runs on this fleet today, pinned. **Serving is sparkrun**
+([`sparkrun/README.md`](sparkrun/README.md)). CI enforces two things against this file: the launcher
+hashes at the bottom of it against `scripts/launch/`, so a launcher change without a `CURRENT.md`
+change fails the build, and recipe↔launcher argv parity via
+`scripts/check/test-prompt-token-details.py`, so the primary path cannot drift from the legacy one.
+Everything else about *why* lives in [`docs/`](docs/); this file is the *what*.
 
-- Single-stream **real-prompt decode ≈ 53 tok/s**.
-- The counting prompt reaches a higher number; that is the **draft-acceptance ceiling**, not
-  throughput. See "How we quote numbers".
-- **KV pool ≈ 2.79M tokens.**
+**Model:** `DeepSeek-V4-Flash-Vision-Exp` @ `86f746b36186f0e567729a5c06a8c918caba82a9` —
+the only supported model. **Runtime:** vLLM
+`0.21.1rc1.dev339+g1967a5627bc3`, DSpark `k=5` probabilistic, `nvfp4_ds_mla` KV,
+1M context. **Served id:** `deepseek-v4-flash-dspark` on `:8888`.
 
----
+Both launchers read `MODEL_DIR` (default `DeepSeek-V4-Flash-Vision-Exp`); the uncensored build
+is the same launcher with `MODEL_DIR=keys-DeepSeekV4Flash-Vision-EXP-ablit` — same shards, same
+tokenizer.
 
-## DeepSeek-V4-Flash-Vision-Exp, TP4 (all four Sparks)
+## TP2 — asusi + bluey
 
-**Launcher:** [`launchers/ds4-vision-tp4.sh <0|1|2|3>`](launchers/ds4-vision-tp4.sh)
+**Recipe:** [`sparkrun/ds4-vision-exp-tp2_v1.yaml`](sparkrun/ds4-vision-exp-tp2_v1.yaml) →
+`sparkrun run ./sparkrun/ds4-vision-exp-tp2_v1.yaml`
+
+**Legacy launcher:** [`scripts/launch/ds4-vision-tp2.sh <0|1>`](scripts/launch/ds4-vision-tp2.sh)
+— see [`docs/LEGACY-LAUNCHERS.md`](docs/LEGACY-LAUNCHERS.md) for staging, rank-by-rank launch and
+exit codes.
+
+| rank | node | fabric IP | role |
+|---|---|---|---|
+| 0 | **Asusi** | `192.168.192.3` | head — serves `:8888`, reads weights over NFS from Bluey (`/mnt/bluey-models`) |
+| 1 | **Bluey** | `192.168.192.1` | worker (`--headless`), weights local at `/var/tmp/models`, NFS-exports them |
+
+Under sparkrun the ranks are assigned and launched for you; the table is the topology it targets.
+The legacy path is worker-first: rank 1, then rank 0. `--master-port 25440`. Plane A only: plane B
+(`roceP2p1s0f0`) is not on a common subnet between these two nodes, so `MERGE_NICS` would try to
+bring RC QPs up across mismatched subnets.
+
+**Expected (TP2):** single-stream real-prompt decode **≈ 53 tok/s** · KV pool **≈ 2.79M
+tokens** · `--max-num-seqs 12` at `--gpu-memory-utilization 0.85`.
+
+## TP4 — all four Sparks
+
+**Recipe:** [`sparkrun/ds4-vision-exp-tp4_v1.yaml`](sparkrun/ds4-vision-exp-tp4_v1.yaml) →
+`sparkrun run ./sparkrun/ds4-vision-exp-tp4_v1.yaml`
+
+**Legacy launcher:** [`scripts/launch/ds4-vision-tp4.sh <0|1|2|3>`](scripts/launch/ds4-vision-tp4.sh)
+— see [`docs/LEGACY-LAUNCHERS.md`](docs/LEGACY-LAUNCHERS.md).
 
 | rank | node | fabric IP | role |
 |---|---|---|---|
@@ -20,38 +53,18 @@ Both launchers read `MODEL_DIR` (default `DeepSeek-V4-Flash-Vision-Exp`); the un
 | 2 | **Reddie** | `192.168.192.2` | worker (NFS) |
 | 3 | **Spark4** | `192.168.192.4` | worker (NFS) |
 
-**Launch order: 3, 2, 1, then 0.**
+Legacy launch order is **3, 2, 1, then 0**, each command run on its own node.
 
-```bash
-./launchers/ds4-vision-tp4.sh 3     # spark4
-./launchers/ds4-vision-tp4.sh 2     # reddie
-./launchers/ds4-vision-tp4.sh 1     # bluey
-./launchers/ds4-vision-tp4.sh 0     # asusi (head, serves :8888)
-```
+**Recipe deltas from TP2:** same image, same `k=5` probabilistic DSpark, same
+`nvfp4_ds_mla` KV, same `--gpu-memory-utilization 0.85` and `--max-model-len 1048576`;
+`--tensor-parallel-size 4`, `--nnodes 4`, **`--max-num-seqs 64`** and
+**`--max-cudagraph-capture-size 66`** (`= 11×(1+k)`, the smallest capture bucket covering 64
+requests — see [`docs/LAUNCH-FLAGS.md`](docs/LAUNCH-FLAGS.md)). CUDA graphs are on
+(`--enforce-eager` is not passed and the head log shows `Graph capturing finished in 10 secs,
+took 0.68 GiB`); the launcher sets no cudagraph-mode env var, so the mode is the image's own
+default rather than something this recipe pins.
 
-**Preflight, on all four nodes:**
-
-- Patch 3 (`patch3-scheduler.py`), Patch 4 (`spec-dspark.py`), Patch 6
-  (`patch6-single_type_kv_cache_manager.py`, source `recipe/overlay/vllm/v1/core/single_type_kv_cache_manager.py`)
-  **and** the four vision port files (`ds4v_model.py`, `ds4v_vision.py`, `ds4v_mm.py`, `ds4v_registry.py`)
-  staged at `/var/tmp`. The launcher checks all seven and exits if any is missing.
-- Patch 6 keeps the prefix cache alive on long conversations: both launchers pass
-  `VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION=${PROTECTED_FRACTION:-0.30}` and
-  `VLLM_SWA_RECYCLE_SKIPPED_BLOCKS=${SWA_RECYCLE:-1}`. Measured on TP2: a 354K-token prompt
-  re-sent after another 354K prefill hits 100% in 1.2 s (stock image: 0%, 235 s cold re-prefill);
-  logs in `docs/patch6-validation/`, analysis in `docs/PATCH6-KV-CACHE-PREFIX-EVICTION.md`.
-- Workers mount Bluey's weights export at `/mnt/bluey-models`.
-- **Drop page cache on all four nodes before launch.**
-
-**Recipe:** same image, same `k=5` probabilistic DSpark, same `nvfp4_ds_mla` KV, same
-`--gpu-memory-utilization 0.85`, `--max-model-len 1048576`. Differences from TP2:
-`--tensor-parallel-size 4`, `--nnodes 4`, **`--max-num-seqs 64`**, and
-**`--max-cudagraph-capture-size 64`** (the workspace copy of this launcher still said 12/12; the
-validated run used 64/64). CUDA graphs are on: `--enforce-eager` is not passed, `--max-cudagraph-capture-size 64` is, and the head log shows `Graph capturing finished in 10 secs, took 0.68 GiB`; the mode is vLLM's default for this image, not pinned by the launcher. Note: the launcher
-not set a cudagraph-mode env var, so this is the runtime's own default on this image rather than
-something we pin.
-
-**Expected (measured 2026-09-02, TP4):**
+**Expected (TP4):**
 
 | | |
 |---|---|
@@ -59,51 +72,64 @@ something we pin.
 | Time to healthy | **~7 min** |
 | Real-prompt decode, single stream | **prose 42 tok/s · code 98 tok/s** |
 | Mixed, 16 streams | **124 tok/s aggregate** |
-| Counting ceiling (labeled draft-acceptance only) | **95 tok/s at C1 · 1,073 tok/s at C48** |
+| Counting ceiling (draft-acceptance only) | **95 tok/s at C1 · 1,073 tok/s at C48** |
 | Cold prefill | **~4.6K tok/s**, flat from 14K to 182K tokens |
 
----
+## Preflight
 
-## How we quote numbers
+Under sparkrun the payload is staged inside the container at boot and verified before the server
+starts, so there is nothing to pre-stage by hand — verify the boot instead (§6 of
+[`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md)). What each staged file is and which patch it
+carries: [`docs/PATCHES.md`](docs/PATCHES.md).
 
-- **Decode is quoted from real prompts** — prose, code, and the like. Those are the numbers to
-  compare against anything else.
-- **The counting prompt is a labeled draft-acceptance ceiling only.** "Count to 300" is nearly
-  perfectly predictable, so the DSpark drafter accepts almost every token and the tok/s figure
-  measures how fast speculation can run, not how fast the model serves work. Never quote a
-  counting number as throughput.
-- **Prefill is cold only.** Prefix caching is on, so a warm prefill number measures the cache.
+- Patch 6 keeps the prefix cache alive on long conversations: both tiers pass
+  `VLLM_PROTECTED_PROMPT_BLOCKS_FRACTION=${PROTECTED_FRACTION:-0.30}` and
+  `VLLM_SWA_RECYCLE_SKIPPED_BLOCKS=${SWA_RECYCLE:-1}`. Measured on TP2: a 354K-token prompt
+  re-sent after another 354K of prefill hits 100% in 1.2 s where the stock image gives 0% and a
+  235 s cold re-prefill.
+- Both tiers pass `--enable-prompt-tokens-details`, so clients can read
+  `usage.prompt_tokens_details.cached_tokens`
+  ([`docs/CACHE-REPORTING.md`](docs/CACHE-REPORTING.md)).
+- **Drop the page cache on all nodes before launch.**
+- Before quoting any number, confirm the `B12X` MoE backend line in the boot log: a missing Patch 4
+  mount costs about half your decode speed with perfect output.
+- The legacy launcher path stages by hand on every node and fails closed on missing files
+  (`exit 4`); see [`docs/LEGACY-LAUNCHERS.md`](docs/LEGACY-LAUNCHERS.md).
 
----
+## Reading the numbers above
 
-## Do not use
+Decode is quoted from **real prompts** (prose, code); counting-prompt figures are labeled
+draft-acceptance ceilings and are never throughput; prefill is **cold only**. The full
+discipline — warm-up and idle decay, streaming under-reports under spec decode, KV pool being a
+per-boot figure, reporting conditions with the number — lives in
+[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
-**Do not use the following as a recipe.** These are dated status notes and superseded snapshots.
-They will move under `archive/` in the next cleanup commit; **nothing is being deleted**, and
-nothing a PR or issue links to changes path — `vision-exp/ds4-vision-tp2.sh` stays as a symlink to
-`launchers/ds4-vision-tp2.sh` for exactly that reason.
+## Repo conventions
 
-- Dated status / point-in-time notes: `SPEED-UPDATE-2026-07-16.md`, `SPEED-UPDATE-2026-07-29.md`,
-  `RUNTIME-BAKEOFF-2026-07-29.md`, `KAI-DS4-UPDATE-NOTE.md`, `OFFICIAL_MAIN_PORT_PLAN.md`,
-  `UPSTREAM_V024_STATUS.md`, `AGENT_GARBLE_FIX.md`, `verified-deployed-2026-07-04/`.
-- Any `MTP_NUM_TOKENS=3` / `k=3` guidance anywhere in this repo. That A/B was measured without the
-  Patch 4 mount, which silently collapses draft acceptance. It is retracted (issue #48). **k=5.**
-- Any `MAX_MODEL_LEN=1500000` guidance, including the KV/context figures still carried in
-  `vision-exp/README.md`'s "Measured" table. Standard is **1,048,576**.
+- **`sparkrun/` is the serving path.** `ds4-vision-exp-tp2_v1.yaml` and
+  `ds4-vision-exp-tp4_v1.yaml` are self-contained — each rebuilds the runtime in-container from a
+  pinned source commit ([`sparkrun/README.md`](sparkrun/README.md)) — and serve the same
+  `deepseek-v4-flash-dspark` id on `:8888` as the launchers. Every deliberate difference
+  between a recipe and its launcher is enumerated in
+  [`docs/SPARKRUN-PARITY.md`](docs/SPARKRUN-PARITY.md), and
+  `scripts/check/test-prompt-token-details.py` fails the build on undocumented drift.
+- **The shell launchers in `scripts/launch/` are the legacy path.** They still work and are kept
+  for the unpublished local fleet image, for air-gapped hosts with weights already staged, and as
+  the argv baseline the parity check runs against. The tables above describe the serving profile
+  both paths reach. Operating instructions:
+  [`docs/LEGACY-LAUNCHERS.md`](docs/LEGACY-LAUNCHERS.md).
+- **`.env.dspark` is the fleet env template**
+  ([`.env.dspark.example`](.env.dspark.example)) for the scripts that source it —
+  `scripts/build/build-dspark-vllm-runtime.sh`, `scripts/serve/prepare-dspark-model-cache.sh`
+  and `scripts/serve/smoke-deepseek-v4-flash-dspark.sh`. The launchers take their
+  configuration from their own `-e` blocks plus `PROTECTED_FRACTION` / `SWA_RECYCLE` /
+  `MODEL_DIR` from the ambient shell, and do **not** source `.env.dspark`.
+- **Serving is k=5 probabilistic DSpark at `--max-model-len 1048576`**, thinking **on** by
+  default (`--default-chat-template-kwargs '{"thinking":true}'`). Reasoning comes back on the
+  `reasoning` field (there is no `reasoning_content` on this runtime) and it consumes
+  `max_tokens` before any content is produced — cap requests at 32K, not 8K.
+- **Vision-Exp is the only supported model.**
 
-**Two things stay put and are NOT archive candidates:**
-
-1. **The text-lane 0731 compose recipe** — `DEFAULT-CONFIG.md`, `docker-compose.dspark.yml`,
-   `.env.dspark.example`, and the root `*-deepseek-v4-flash-dspark.sh` / `validate-dspark-config.sh`
-   scripts. That is a **second documented recipe** for the text checkpoint, still supported, and it
-   stays exactly where it is unless the archive commit says otherwise. It is not the vision recipe:
-   if you are serving the vision build, use the launchers above.
-2. **`sparkrun/`** — the self-contained sparkrun recipes for both checkpoints, and **`parity/`**.
-
-The self-contained `sparkrun/` recipe serves under the id `deepseek-v4-flash-vision-exp`; the launchers here serve `deepseek-v4-flash-dspark`. Clients pointed at :8888 use the launcher's id.
-
-<!-- launcher hashes, maintained by tools/check-current.sh --write -->
-
-<!-- launcher hashes, maintained by tools/check-current.sh --write -->
-sha256 63a5f6c3ea32ecf764f76ac32ef7307dd637430301eab0ffc9bf0dbdd5d40531  launchers/ds4-vision-tp2.sh
-sha256 50b33b978f9c96ed318907519ff3f4e60abf15fb762c90345852e3c2cae1b266  launchers/ds4-vision-tp4.sh
+<!-- launcher hashes, maintained by scripts/check/check-current.sh --write -->
+sha256 ee15082c434154c844096bd5aeb0ade37fe5f424f97eb6c214db76580e09f128  scripts/launch/ds4-vision-tp2.sh
+sha256 56d4664aceab18d1ed701863a9f8c5f671aa5ed6845f880bebf69ca4e3b51fdd  scripts/launch/ds4-vision-tp4.sh
